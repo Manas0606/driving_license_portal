@@ -15,7 +15,7 @@ app.use('/api',rateLimit({windowMs:60_000,limit:100,standardHeaders:'draft-8',le
 app.use('/api',(req,res,next)=>{res.set('Cache-Control','no-store');if(!['GET','HEAD','OPTIONS'].includes(req.method)&&req.get('origin')!==origin)return res.status(403).json({error:'Invalid request origin'});next();});
 app.get('/api/health',async(req,res)=>{
  if(req.query.probe!=='1')return res.json({status:'UP'});
- try{res.json({status:'UP',configured:isConfigured(),provider:await probeProvider()});}catch{res.status(500).json({status:'UP',error:'Invalid provider endpoint configuration'});}
+ try{res.json({status:'UP',configured:isConfigured(),region:process.env.VERCEL_REGION||'local',provider:await probeProvider()});}catch{res.status(500).json({status:'UP',error:'Invalid provider endpoint configuration'});}
 });
 app.get('/api/auth/me',(req,res)=>res.json({configured:isConfigured(),profile:null}));
 function transaction(req,res){
