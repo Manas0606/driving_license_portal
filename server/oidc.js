@@ -26,7 +26,14 @@ export function validateSubject(id, info) {
   if (typeof id.sub !== 'string' || !id.sub || id.sub !== info.sub) throw new Error('UserInfo subject mismatch');
 }
 const config = {
-  discovery: process.env.ESIGNET_DISCOVERY_URL || 'https://esignet.mosip-demo.mosip.net/.well-known/openid-configuration',
+  service: process.env.ESIGNET_SERVICE_URL || 'https://esignet.mosip-demo.mosip.net/v1/esignet',
+  authorize: process.env.ESIGNET_AUTHORIZE_URI || 'https://esignet.mosip-demo.mosip.net/authorize',
+  tokenEndpoint: process.env.ESIGNET_TOKEN_ENDPOINT,
+  userinfoEndpoint: process.env.ESIGNET_USERINFO_ENDPOINT,
+  jwksEndpoint: process.env.ESIGNET_JWKS_URL || 'https://esignet.mosip-demo.mosip.net/.well-known/jwks.json',
+  parEndpoint: process.env.ESIGNET_PAR_ENDPOINT,
+  tokenAudience: process.env.ESIGNET_AUD_URL,
+  parAudience: process.env.ESIGNET_PAR_AUD_URL,
   issuer: process.env.ESIGNET_EXPECTED_ISSUER || 'https://esignet.mosip-demo.mosip.net',
   tokenIssuer: process.env.ESIGNET_TOKEN_ISSUER || 'https://esignet.mosip-demo.mosip.net/v1/esignet',
   clientId: process.env.ESIGNET_CLIENT_ID || '1IQWpkTghWJkAMXnwX3AYiUmFYA20wdw-CnRICPW1uI',
@@ -40,32 +47,49 @@ const config = {
   par: process.env.ESIGNET_USE_PAR === 'true'
 };
 export const isConfigured = () => Boolean(config.clientId && (config.keyFile || config.keyJson));
-let cached, jwks;
+let jwks;
 function trustedUrl(value) {
   const url = new URL(value);
-  if (url.protocol !== 'https:' || url.username || url.password || url.origin !== new URL(config.discovery).origin) throw new Error('Untrusted OIDC endpoint');
+  if (url.protocol !== 'https:' || url.username || url.password || url.origin !== new URL(config.service).origin) throw new Error('Untrusted OIDC endpoint');
   return url.href;
+}
+export function providerEndpoints(){
+  const base=config.service.replace(/\/+$/,'');
+  const m={
+    issuer:config.issuer,
+    authorization_endpoint:config.authorize,
+    token_endpoint:config.tokenEndpoint||base+'/oauth/v2/token',
+    userinfo_endpoint:config.userinfoEndpoint||base+'/oidc/userinfo',
+    jwks_uri:config.jwksEndpoint,
+    pushed_authorization_request_endpoint:config.parEndpoint||base+'/oauth/par'
+  };
+  for(const k of ['authorization_endpoint','token_endpoint','userinfo_endpoint','jwks_uri','pushed_authorization_request_endpoint'])m[k]=trustedUrl(m[k]);
+  return m;
+}
+function safeErrorCode(error){
+  const code=error?.cause?.code||error?.code||error?.name||'ERROR';
+  return /^[A-Za-z0-9_]{1,80}$/.test(code)?code:'ERROR';
 }
 async function request(url, options = {}) {
   const response = await fetch(trustedUrl(url), { ...options, redirect: 'error', signal: AbortSignal.timeout(12000) });
   if (!response.ok) { const error=new Error('Identity provider HTTP '+response.status);error.code='IDP_HTTP_'+response.status;throw error; }
   return response;
 }
-async function metadata() {
-  if (cached && cached.until > Date.now()) return cached.data;
-  let data;
-  try{data=await (await request(config.discovery)).json();}catch(error){
-    // IIITB 1.4.1 exposes the discovery controller directly here.
-    const fallback=new URL('/v1/esignet/oidc/.well-known/openid-configuration',config.discovery).href;
-    if(fallback===config.discovery)throw error;
-    data=await (await request(fallback)).json();
-  }
-  if (data.issuer !== config.issuer) throw new Error('Discovery issuer mismatch');
-  for (const key of ['authorization_endpoint','token_endpoint','userinfo_endpoint','jwks_uri']) trustedUrl(data[key]);
-  if (config.par) trustedUrl(data.pushed_authorization_request_endpoint);
-  if (!jwks || cached?.data.jwks_uri !== data.jwks_uri) jwks = createRemoteJWKSet(new URL(data.jwks_uri), { timeoutDuration: 10000 });
-  cached = { data, until: Date.now() + 5 * 60_000 };
-  return data;
+function metadata(){
+  const m=providerEndpoints();
+  if(!jwks)jwks=createRemoteJWKSet(new URL(m.jwks_uri),{timeoutDuration:10000});
+  return m;
+}
+// Non-authenticated connectivity check: no codes, assertions, tokens or credentials sent.
+export async function probeProvider(){
+  const m=providerEndpoints();
+  const targets={token:m.token_endpoint,userinfo:m.userinfo_endpoint,jwks:m.jwks_uri};
+  return Object.fromEntries(await Promise.all(Object.entries(targets).map(async ([name,url])=>{
+    try{
+      const response=await fetch(url,{method:name==='jwks'?'GET':'HEAD',redirect:'manual',signal:AbortSignal.timeout(8000)});
+      return [name,{reachable:true,httpStatus:response.status}];
+    }catch(error){return [name,{reachable:false,error:safeErrorCode(error)}];}
+  })));
 }
 async function assertion(audience) {
   const raw=config.keyJson || await readFile(config.keyFile, 'utf8');
@@ -77,9 +101,9 @@ async function assertion(audience) {
     .setIssuer(config.clientId).setSubject(config.clientId).setAudience(audience)
     .setIssuedAt().setExpirationTime('2m').setJti(randomUUID()).sign(key);
 }
-async function authenticatedForm(endpoint, form) {
+async function authenticatedForm(endpoint, form, audience=endpoint) {
   form.set('client_assertion_type','urn:ietf:params:oauth:client-assertion-type:jwt-bearer');
-  form.set('client_assertion',await assertion(endpoint));
+  form.set('client_assertion',await assertion(audience));
   return (await request(endpoint,{method:'POST',body:form})).json();
 }
 export async function begin(transaction) {
@@ -99,14 +123,14 @@ export async function pushedRequest(transaction) {
     state:transaction.state,nonce:transaction.nonce,code_challenge:challenge(transaction.verifier),code_challenge_method:'S256'});
   if(config.acr) form.set('acr_values',config.acr);
   form.set('claims',JSON.stringify({userinfo:{name:{essential:true},picture:{essential:false},birthdate:{essential:false},gender:{essential:false},email:{essential:false},phone_number:{essential:false},address:{essential:false}},id_token:{}}));
-  const result=await authenticatedForm(m.pushed_authorization_request_endpoint,form);
+  const result=await authenticatedForm(m.pushed_authorization_request_endpoint,form,config.parAudience||m.pushed_authorization_request_endpoint);
   if(typeof result.request_uri !== 'string') throw new Error('Invalid PAR response');
   return result.request_uri;
 }
 export async function complete(transaction, code) {
-  let m;try{m=await metadata();}catch(error){throw stageError('Discovery',error);}
+  let m;try{m=await metadata();}catch(error){throw stageError('Provider configuration',error);}
   let tokens;try{tokens = await authenticatedForm(m.token_endpoint,new URLSearchParams({grant_type:'authorization_code',code,
-    redirect_uri:config.redirect,client_id:config.clientId,code_verifier:transaction.verifier}));}catch(error){throw stageError('Token exchange',error);}
+    redirect_uri:config.redirect,client_id:config.clientId,code_verifier:transaction.verifier}),config.tokenAudience||m.token_endpoint);}catch(error){throw stageError('Token exchange',error);}
   if(typeof tokens.id_token!=='string'||typeof tokens.access_token!=='string') throw new Error('Incomplete token response');
   const issuer=config.tokenIssuer || m.issuer;
   const verification={issuer,audience:config.clientId,algorithms:['RS256','PS256'],clockTolerance:30};
@@ -128,7 +152,7 @@ export async function complete(transaction, code) {
   // Same UserInfo mapping as Health Services; return consented attributes, never tokens.
   return selectProfile(info);
 }
-function stageError(stage,error){const code=error.code||error.name||'ERROR';const safe=/^[A-Za-z0-9_]{1,80}$/.test(code)?code:'ERROR';const wrapped=new Error(stage+' failed ('+safe+').');wrapped.code=safe;wrapped.publicMessage=wrapped.message;return wrapped;}
+function stageError(stage,error){const safe=safeErrorCode(error);const wrapped=new Error(stage+' failed ('+safe+').');wrapped.code=safe;wrapped.publicMessage=wrapped.message;return wrapped;}
 export function selectProfile(info){
  // The reference Sidenav reads verified_claims before ordinary claims.
  const values={...info};for(const entry of Array.isArray(info.verified_claims)?info.verified_claims:[]){for(const [key,value] of Object.entries(entry?.claims||{}))if(value!=null)values[key]=value;}

@@ -5,7 +5,7 @@ An independent, non-government demonstration relying party for MOSIP eSignet. No
 ## Features
 - Responsive animated neon mobility artwork (local vector SVG, scalable without loss), accessible controls and reduced-motion support.
 - The same official `@mosip/sign-in-with-esignet` package and `init` API as [MOSIP Health Services](https://github.com/mosip/esignet-mock-services/blob/master/mock-relying-party-ui/src/components/Login.js).
-- OIDC discovery, authorization code, PKCE S256, optional PAR, server-side private_key_jwt, state, nonce, provider JWKS signature and subject checks.
+- Configured provider endpoints, authorization code, PKCE S256, optional PAR, server-side private_key_jwt, state, nonce, provider JWKS signature and subject checks.
 - New licence, renewal, replacement and learner permit applications; temporary application tracker (maximum five demo requests per sign-in, cleared at logout or expiry). No database required.
 - No fake login or automatic licence approval. The RP retrieves and validates identity through eSignet and follows the Health Services reference pattern using browser sessionStorage for transient state, PKCE and the demo profile; tokens and signing keys are never sent to the browser.
 
@@ -27,7 +27,7 @@ npm start
 Open http://localhost:8080. For the full container build use `docker compose up --build` instead. Keep the origin at localhost:8080 for the registered callback.
 
 ## MOSIP demo client onboarding
-Discovery defaults to https://esignet.mosip-demo.mosip.net/.well-known/openid-configuration.
+Provider service defaults to https://esignet.mosip-demo.mosip.net/v1/esignet.
 Register a **new** relying party with the demo environment operator. Provide an RSA public JWK, allowed scopes (openid profile), requested claims, client name DriveNext, and exact redirect URI `http://localhost:8080/api/auth/callback` if accepted for local testing. For hosted use, register the exact HTTPS URI instead. Never reuse the Health Services client or copy sample private keys.
 
 Generate a key pair locally:
@@ -36,7 +36,7 @@ node scripts/generate-key.js
 ```
 Share only secrets/client-public.jwk with the operator. Put the registered client ID in ESIGNET_CLIENT_ID, keep secrets/client.jwk private, and restart. The signing JWK kid must match onboarding. Set ESIGNET_ACR and ESIGNET_USE_PAR as required by the target provider. Verify the published discovery issuer and token issuer; if intentionally different, configure ESIGNET_TOKEN_ISSUER with the confirmed issuer. The server fails closed if JWKS signature validation fails. Separate encrypted UserInfo key can be configured via ESIGNET_USERINFO_JWK_FILE; only supported signed nested JWTs are accepted.
 
-The demo discovery endpoint must be reachable and the registration must allow a standard confidential code flow with PKCE; DPoP is not implemented. If mandatory in that environment, add DPoP before onboarding. Never disable token validation. Live login is not verified without an onboarded client and its key.
+The configured token, UserInfo and JWKS endpoints must be reachable and the registration must allow a standard confidential code flow with PKCE; DPoP is not implemented. If mandatory in that environment, add DPoP before onboarding. Never disable token validation. Live login is not verified without an onboarded client and its key.
 
 ## Deployment and production checklist
 This is a security-conscious demo baseline, not an audited production licensing system. Configure HTTPS APP_ORIGIN, exact redirect, mounted or environment secrets; set TRUST_PROXY=1 only behind one trusted proxy. Before production, add durable application storage, server-side session revocation/replay protection, distributed rate limiting, monitoring, dependency scanning/lockfile, security testing, jurisdiction rules and official licence issuance. The UI is a mock relying party: browser-held demo records are not authoritative and must not authorize any protected service. Local logout clears sessionStorage and does not end the provider session. No OTP or national ID numbers are collected by this portal. Do not connect to or modify the MOSIP demo database.
@@ -61,3 +61,6 @@ The Vercel callback is an explicit SPA rewrite to index.html at the existing reg
 
 ## IIITB demo compatibility
 Reference: iiitb-pilot/esignet branch mosip-demo-1.4.1. The default signed ID-token issuer is the demo host plus `/v1/esignet`, not its discovery issuer; override ESIGNET_TOKEN_ISSUER for other deployments. The provider's HTTPS UserInfo response is decoded as in Health Services; the ID token signature and subject binding remain checked. An explicit official SDK logo and full sign-in label are provided. Locale selection supports en, hi, ar, km, kn and ta, sends ui_locales, and translates common portal labels (some detailed help text remains English). Arabic uses RTL. Sign-in errors show the failed stage without displaying credentials or tokens. The callback remains the existing registered URL.
+
+## Direct provider endpoints (Health Services compatibility)
+No runtime discovery request is needed. The default token and UserInfo endpoints are `/v1/esignet/oauth/v2/token` and `/v1/esignet/oidc/userinfo` on the demo host, with `/.well-known/jwks.json` used for ID token verification. The token audience defaults to the configured token endpoint, as in Health Services. Override only with independently verified values via ESIGNET_SERVICE_URL, ESIGNET_TOKEN_ENDPOINT, ESIGNET_USERINFO_ENDPOINT, ESIGNET_JWKS_URL and ESIGNET_AUD_URL. TLS validation remains enabled. GET `/api/health?probe=1` tests reachability without credentials and reports underlying connection error codes; HTTP 401/405 from an unauthenticated HEAD request still establishes network reachability.

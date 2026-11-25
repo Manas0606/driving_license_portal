@@ -2,7 +2,7 @@ import express from 'express';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { resolve } from 'node:path';
-import { begin, complete, isConfigured, validateBrowserTransaction, pushedRequest } from './oidc.js';
+import { begin, complete, isConfigured, validateBrowserTransaction, pushedRequest, probeProvider } from './oidc.js';
 
 const origin=new URL(process.env.APP_ORIGIN||(process.env.VERCEL==='1'?'https://driving-license-portal-wine.vercel.app':'http://localhost:8080')).origin;
 const secure=origin.startsWith('https:');
@@ -13,7 +13,10 @@ app.use(helmet({referrerPolicy:{policy:'strict-origin'},contentSecurityPolicy:{d
 app.use(express.json({limit:'16kb'}));
 app.use('/api',rateLimit({windowMs:60_000,limit:100,standardHeaders:'draft-8',legacyHeaders:false}));
 app.use('/api',(req,res,next)=>{res.set('Cache-Control','no-store');if(!['GET','HEAD','OPTIONS'].includes(req.method)&&req.get('origin')!==origin)return res.status(403).json({error:'Invalid request origin'});next();});
-app.get('/api/health',(req,res)=>res.json({status:'UP'}));
+app.get('/api/health',async(req,res)=>{
+ if(req.query.probe!=='1')return res.json({status:'UP'});
+ try{res.json({status:'UP',configured:isConfigured(),provider:await probeProvider()});}catch{res.status(500).json({status:'UP',error:'Invalid provider endpoint configuration'});}
+});
 app.get('/api/auth/me',(req,res)=>res.json({configured:isConfigured(),profile:null}));
 function transaction(req,res){
   try{return validateBrowserTransaction(req.body?.transaction);}
@@ -47,7 +50,7 @@ app.post('/api/fetchUserInfo',rateLimit({windowMs:60_000,limit:15}),async(req,re
     const identity=await complete(tx,code);
     res.json(identity);
   } catch(error) {
-    console.error('eSignet exchange failed:',error.code||error.name);
+    console.error('eSignet exchange failed:',error.publicMessage||error.code||error.name);
     res.status(502).json({error:error.publicMessage||'Identity verification failed. Please sign in again.'});
   }
 });
