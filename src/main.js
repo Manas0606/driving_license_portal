@@ -1,5 +1,7 @@
 import { init } from '@mosip/sign-in-with-esignet';
 import { icon } from './icons.js';
+import {startTransaction,consumeTransaction,clearSession,storeProfile,getProfile,getApplications,addApplication} from './session.js';
+import {validateApplication} from '../server/domain.js';
 import './styles.css';
 
 const root=document.querySelector('#app');
@@ -29,23 +31,39 @@ function landing(configured){
  setupButton(mount).catch(e=>{mount.textContent='';notify(e.message);const retry=document.createElement('button');retry.className='primary';retry.textContent='Retry secure sign-in';retry.onclick=()=>landing(true);mount.append(retry);});
 }
 async function setupButton(mount){
- const config=await api('/auth/start','POST',{});
+ const transaction=startTransaction();
+ const config=await api('/auth/start','POST',{transaction});
  const {challenge,usePar,...oidcConfig}=config;
  init({oidcConfig:{...oidcConfig,display:'page',ui_locales:'en',
   code_challenge:async()=>({code_challenge:challenge,code_challenge_method:'S256'}),
-  ...(usePar?{par_callback:async()=> (await api('/auth/par','POST',{state:config.state})).request_uri,par_callback_timeout:12000}:{})},
+  ...(usePar?{par_callback:async()=> (await api('/auth/par','POST',{transaction})).request_uri,par_callback_timeout:12000}:{})},
   buttonConfig:{shape:'soft_edges',labelText:'Sign in with',width:'100%'},signInElement:mount});
 }
 function dashboard(profile){
- root.innerHTML=layout(`<section class="dashboard-top"><div class="eyebrow"><span></span> YOUR DRIVER WORKSPACE</div><h1>Hello, <span class="gradient-text">${escape(profile.name)}.</span></h1><p>Manage your journey, one step at a time.</p><span class="identity-pill">${icon('shield')} Identity verified via eSignet</span></section><section id="services" class="section"><div class="section-head"><div><div class="eyebrow">AVAILABLE SERVICES</div><h2>Start an application</h2></div></div><div class="services-grid">${cards()}</div></section><section id="how" class="section"><div class="section-head"><div><div class="eyebrow">YOUR ACTIVITY</div><h2>Application tracker</h2></div><button class="secondary" id="reload">${icon('refresh')} Refresh</button></div><p id="notice" role="status" hidden></p><div id="applications" class="tracker">Loading applications…</div></section><dialog id="application-dialog"><form id="application-form"><div class="dialog-head"><div><div class="eyebrow">NEW REQUEST</div><h2 id="form-title"></h2></div><button type="button" id="close-dialog" class="text-button" aria-label="Close form">✕</button></div><p>Demo only. Requests disappear on logout or session expiry; no real licence or appointment is issued.</p><label>Vehicle category<select name="category" required><option value="">Select category</option><option>Motorcycle</option><option>Passenger car</option><option>Commercial vehicle</option></select></label><label id="reference-label" hidden>Existing licence reference<input name="licenceReference" maxlength="32" pattern="[A-Za-z0-9-]{4,32}"></label><label>Preferred appointment date<input type="date" name="appointment" required></label><label class="check-label"><input name="declaration" type="checkbox" required> I understand this is a temporary demonstration request.</label><p role="alert" id="form-error"></p><button class="primary" type="submit">Submit request ${icon('arrow')}</button></form></dialog>`,true);
- document.querySelector('#logout').onclick=async()=>{try{await api('/auth/logout','POST',{});location.assign('/');}catch(e){notify(e.message);}};
+ root.innerHTML=layout(`<section class="dashboard-top"><div class="eyebrow"><span></span> YOUR DRIVER WORKSPACE</div><h1>Hello, <span class="gradient-text">${escape(profile.name)}.</span></h1><p>Manage your journey, one step at a time.</p><span class="identity-pill">${icon('shield')} eSignet demo profile</span></section><section id="services" class="section"><div class="section-head"><div><div class="eyebrow">AVAILABLE SERVICES</div><h2>Start an application</h2></div></div><div class="services-grid">${cards()}</div></section><section id="how" class="section"><div class="section-head"><div><div class="eyebrow">YOUR ACTIVITY</div><h2>Application tracker</h2></div><button class="secondary" id="reload">${icon('refresh')} Refresh</button></div><p id="notice" role="status" hidden></p><div id="applications" class="tracker">Loading applications…</div></section><dialog id="application-dialog"><form id="application-form"><div class="dialog-head"><div><div class="eyebrow">NEW REQUEST</div><h2 id="form-title"></h2></div><button type="button" id="close-dialog" class="text-button" aria-label="Close form">✕</button></div><p>Demo only. Requests disappear on logout or session expiry; no real licence or appointment is issued.</p><label>Vehicle category<select name="category" required><option value="">Select category</option><option>Motorcycle</option><option>Passenger car</option><option>Commercial vehicle</option></select></label><label id="reference-label" hidden>Existing licence reference<input name="licenceReference" maxlength="32" pattern="[A-Za-z0-9-]{4,32}"></label><label>Preferred appointment date<input type="date" name="appointment" required></label><label class="check-label"><input name="declaration" type="checkbox" required> I understand this is a temporary demonstration request.</label><p role="alert" id="form-error"></p><button class="primary" type="submit">Submit request ${icon('arrow')}</button></form></dialog>`,true);
+ document.querySelector('#logout').onclick=()=>{clearSession();location.assign('/');};
  document.querySelector('#reload').onclick=loadApplications;
  const dialog=document.querySelector('#application-dialog'),form=document.querySelector('#application-form');
  let selected;
  document.querySelectorAll('[data-service]').forEach(el=>el.onclick=()=>{selected=el.dataset.service;form.reset();document.querySelector('#form-title').textContent=serviceList.find(s=>s.id===selected).title;const required=['RENEWAL','REPLACEMENT'].includes(selected);document.querySelector('#reference-label').hidden=!required;form.licenceReference.required=required;const today=new Date();form.appointment.min=today.toISOString().slice(0,10);today.setUTCDate(today.getUTCDate()+90);form.appointment.max=today.toISOString().slice(0,10);document.querySelector('#form-error').textContent='';dialog.showModal();});
  document.querySelector('#close-dialog').onclick=()=>dialog.close();
- form.onsubmit=async event=>{event.preventDefault();const data=new FormData(form),button=form.querySelector('[type=submit]');button.disabled=true;try{await api('/applications','POST',{service:selected,category:data.get('category'),appointment:data.get('appointment'),licenceReference:data.get('licenceReference'),declaration:data.get('declaration')==='on'});dialog.close();await loadApplications();}catch(e){document.querySelector('#form-error').textContent=e.message;}finally{button.disabled=false;}};
+ form.onsubmit=async event=>{event.preventDefault();const data=new FormData(form),button=form.querySelector('[type=submit]');button.disabled=true;try{addApplication(validateApplication({service:selected,category:data.get('category'),appointment:data.get('appointment'),licenceReference:data.get('licenceReference'),declaration:data.get('declaration')==='on'}));dialog.close();await loadApplications();}catch(e){document.querySelector('#form-error').textContent=e.message;}finally{button.disabled=false;}};
  loadApplications();
 }
-async function loadApplications(){const el=document.querySelector('#applications');try{const data=await api('/applications');el.innerHTML=data.length?data.map(a=>'<article class="application-row"><span class="service-icon">'+icon('card')+'</span><div><strong>'+escape(serviceList.find(s=>s.id===a.service)?.title||a.service)+'</strong><small>'+escape(a.category)+' · Ref '+escape(a.id)+'</small></div><div><small>Preferred date</small><strong>'+escape(a.appointment)+'</strong></div><span class="status">'+escape(a.status)+'</span></article>').join(''):'<div class="empty">'+icon('card')+'<h3>No applications yet</h3><p>Choose a service above to begin. Demo requests are cleared when your session ends.</p></div>';}catch(e){el.textContent=e.message;}}
-api('/auth/me').then(data=>data.profile?dashboard(data.profile):landing(data.configured)).catch(()=>{landing(false);notify('Portal backend is unavailable. Please reload or contact the portal administrator.');});
+async function loadApplications(){const el=document.querySelector('#applications');try{const data=getApplications();el.innerHTML=data.length?data.map(a=>'<article class="application-row"><span class="service-icon">'+icon('card')+'</span><div><strong>'+escape(serviceList.find(s=>s.id===a.service)?.title||a.service)+'</strong><small>'+escape(a.category)+' · Ref '+escape(a.id)+'</small></div><div><small>Preferred date</small><strong>'+escape(a.appointment)+'</strong></div><span class="status">'+escape(a.status)+'</span></article>').join(''):'<div class="empty">'+icon('card')+'<h3>No applications yet</h3><p>Choose a service above to begin. Demo requests are cleared when your session ends.</p></div>';}catch(e){el.textContent=e.message;}}
+async function boot(){
+ const query=new URLSearchParams(location.search);
+ if(query.has('code')||query.has('error')){
+  history.replaceState(null,'','/');
+  root.textContent='Completing eSignet sign-in…';
+  try{
+   const transaction=consumeTransaction(query.get('state'));
+   if(query.has('error')||!query.get('code'))throw new Error('Sign-in was not completed.');
+   const profile=await api('/fetchUserInfo','POST',{transaction,code:query.get('code')});
+   storeProfile(profile);dashboard(profile);return;
+  }catch(error){clearSession();const data=await api('/auth/me').catch(()=>({configured:false}));landing(data.configured);notify(error.message);return;}
+ }
+ const profile=getProfile();if(profile){dashboard(profile);return;}
+ const data=await api('/auth/me');landing(data.configured);
+}
+boot().catch(()=>{landing(false);notify('Portal backend is unavailable. Please reload or contact the portal administrator.');});

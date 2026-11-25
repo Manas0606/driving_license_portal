@@ -11,7 +11,7 @@
     "build": "vite build",
     "start": "node --env-file-if-exists=.env server/index.js",
     "test": "node --test",
-    "check": "node --check server/index.js && node --check server/app.js && node --check server/session.js && node --check server/oidc.js && node --check src/main.js"
+    "check": "node --check server/index.js && node --check server/app.js && node --check src/session.js && node --check server/oidc.js && node --check src/main.js"
   },
   "dependencies": {
     "@mosip/sign-in-with-esignet": "0.1.1-beta.0",

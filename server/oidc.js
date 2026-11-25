@@ -18,6 +18,10 @@ export function validateTransaction(transaction, state) {
     throw new Error('Invalid or expired authorization transaction');
   }
 }
+export function validateBrowserTransaction(tx) {
+  if(!tx||!['state','nonce','verifier'].every(k=>typeof tx[k]==='string'&&/^[A-Za-z0-9_-]{43,128}$/.test(tx[k]))||!Number.isSafeInteger(tx.expiresAt)||tx.expiresAt<=Date.now()||tx.expiresAt>Date.now()+600000)throw new Error('Invalid transaction');
+  return {state:tx.state,nonce:tx.nonce,verifier:tx.verifier,expiresAt:tx.expiresAt};
+}
 export function validateSubject(id, info) {
   if (typeof id.sub !== 'string' || !id.sub || id.sub !== info.sub) throw new Error('UserInfo subject mismatch');
 }
@@ -32,7 +36,7 @@ const config = {
   encryptionJson: process.env.ESIGNET_USERINFO_JWK,
   redirect: new URL('/api/auth/callback', process.env.APP_ORIGIN || (process.env.VERCEL_PROJECT_PRODUCTION_URL?'https://'+process.env.VERCEL_PROJECT_PRODUCTION_URL:'http://localhost:8080')).href,
   scope: process.env.ESIGNET_SCOPE || 'openid profile',
-  acr: process.env.ESIGNET_ACR,
+  acr: process.env.ESIGNET_ACR || 'mosip:idp:acr:linked-wallet mosip:idp:acr:biometrics mosip:idp:acr:generated-code',
   par: process.env.ESIGNET_USE_PAR === 'true'
 };
 export const isConfigured = () => Boolean(config.clientId && (config.keyFile || config.keyJson));
@@ -110,8 +114,8 @@ export async function complete(transaction, code) {
   }
   const info=body.startsWith('{')?JSON.parse(body):(await jwtVerify(body,jwks,verification)).payload;
   validateSubject(id,info);
-  // Persist only a pseudonymous account reference; keep minimal profile in the session.
-  return {account:createHash('sha256').update(JSON.stringify([issuer,id.sub])).digest('hex'),
+  // Return only a minimal profile to the reference UI; no tokens are exposed.
+  return {
     name:typeof info.name==='string'?info.name:typeof info.given_name==='string'?info.given_name:'Resident',
     birthdate:typeof info.birthdate==='string'?info.birthdate:null};
 }
