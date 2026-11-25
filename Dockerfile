@@ -10,7 +10,8 @@ WORKDIR /app
 COPY --from=build --chown=node:node /app/package*.json ./
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
-COPY --from=build --chown=node:node /app/server ./server
+COPY --from=build --chown=node:node /app/mock-relying-party-service ./mock-relying-party-service
+COPY --from=build --chown=node:node /app/mock-relying-party-ui/public ./mock-relying-party-ui/public
 USER node
 EXPOSE 8080
-CMD ["node","server/index.js"]
+CMD ["node","mock-relying-party-service/index.js"]

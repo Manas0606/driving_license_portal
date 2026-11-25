@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {validateApplication} from '../server/domain.js';
-import {newTransaction,validateTransaction,challenge,validateSubject} from '../server/oidc.js';
+import {validateApplication} from '../mock-relying-party-service/domain.js';
+import {newTransaction,validateTransaction,challenge,validateSubject} from '../mock-relying-party-service/esignetService.js';
 const valid={service:'NEW',category:'Passenger car',appointment:'2026-12-01',declaration:true};
 test('valid application',()=>assert.equal(validateApplication(valid,'2026-11-25').service,'NEW'));
 test('rejects invalid service, date, declaration and missing reference',()=>{for(const patch of [{service:'constructor'},{appointment:'2026-02-30'},{appointment:'2027-12-01'},{declaration:false},{service:'RENEWAL'}])assert.throws(()=>validateApplication({...valid,...patch},'2026-11-25'));});

@@ -25,27 +25,7 @@ export function validateBrowserTransaction(tx) {
 export function validateSubject(id, info) {
   if (typeof id.sub !== 'string' || !id.sub || id.sub !== info.sub) throw new Error('UserInfo subject mismatch');
 }
-const config = {
-  service: process.env.ESIGNET_SERVICE_URL || 'https://esignet.mosip-demo.mosip.net/v1/esignet',
-  authorize: process.env.ESIGNET_AUTHORIZE_URI || 'https://esignet.mosip-demo.mosip.net/authorize',
-  tokenEndpoint: process.env.ESIGNET_TOKEN_ENDPOINT,
-  userinfoEndpoint: process.env.ESIGNET_USERINFO_ENDPOINT,
-  jwksEndpoint: process.env.ESIGNET_JWKS_URL || 'https://esignet.mosip-demo.mosip.net/.well-known/jwks.json',
-  parEndpoint: process.env.ESIGNET_PAR_ENDPOINT,
-  tokenAudience: process.env.ESIGNET_AUD_URL,
-  parAudience: process.env.ESIGNET_PAR_AUD_URL,
-  issuer: process.env.ESIGNET_EXPECTED_ISSUER || 'https://esignet.mosip-demo.mosip.net',
-  tokenIssuer: process.env.ESIGNET_TOKEN_ISSUER || 'https://esignet.mosip-demo.mosip.net/v1/esignet',
-  clientId: process.env.ESIGNET_CLIENT_ID || '1IQWpkTghWJkAMXnwX3AYiUmFYA20wdw-CnRICPW1uI',
-  keyFile: process.env.ESIGNET_PRIVATE_JWK_FILE,
-  keyJson: process.env.ESIGNET_PRIVATE_JWK,
-  encryptionFile: process.env.ESIGNET_USERINFO_JWK_FILE,
-  encryptionJson: process.env.ESIGNET_USERINFO_JWK,
-  redirect: new URL('/api/auth/callback', process.env.APP_ORIGIN || (process.env.VERCEL==='1'?'https://driving-license-portal-wine.vercel.app':'http://localhost:8080')).href,
-  scope: process.env.ESIGNET_SCOPE || 'openid profile',
-  acr: process.env.ESIGNET_ACR || 'mosip:idp:acr:linked-wallet mosip:idp:acr:biometrics mosip:idp:acr:generated-code',
-  par: process.env.ESIGNET_USE_PAR === 'true'
-};
+import {config,readProfileConfig,buildClaims,validClaim} from './config.js';
 export const isConfigured = () => Boolean(config.clientId && (config.keyFile || config.keyJson));
 let jwks;
 function trustedUrl(value) {
@@ -91,7 +71,7 @@ export async function probeProvider(){
     }catch(error){return [name,{reachable:false,error:safeErrorCode(error)}];}
   })));
 }
-async function assertion(audience) {
+export async function generateSignedJwt(audience) {
   const raw=config.keyJson || await readFile(config.keyFile, 'utf8');
   const parsed=JSON.parse(raw.trim().startsWith('{')?raw:Buffer.from(raw,'base64').toString('utf8'));
   const jwk=parsed.keys?.[0]||parsed;
@@ -103,7 +83,7 @@ async function assertion(audience) {
 }
 async function authenticatedForm(endpoint, form, audience=endpoint) {
   form.set('client_assertion_type','urn:ietf:params:oauth:client-assertion-type:jwt-bearer');
-  form.set('client_assertion',await assertion(audience));
+  form.set('client_assertion',await generateSignedJwt(audience));
   return (await request(endpoint,{method:'POST',body:form})).json();
 }
 export async function begin(transaction) {
@@ -122,21 +102,17 @@ export async function pushedRequest(transaction) {
   const form = new URLSearchParams({response_type:'code',client_id:config.clientId,redirect_uri:config.redirect,scope:config.scope,
     state:transaction.state,nonce:transaction.nonce,code_challenge:challenge(transaction.verifier),code_challenge_method:'S256'});
   if(config.acr) form.set('acr_values',config.acr);
-  form.set('claims',JSON.stringify({userinfo:{name:{essential:true},picture:{essential:false},birthdate:{essential:false},gender:{essential:false},email:{essential:false},phone_number:{essential:false},address:{essential:false}},id_token:{}}));
+  form.set('claims',JSON.stringify(buildClaims()));
   const result=await authenticatedForm(m.pushed_authorization_request_endpoint,form,config.parAudience||m.pushed_authorization_request_endpoint);
   if(typeof result.request_uri !== 'string') throw new Error('Invalid PAR response');
   return result.request_uri;
 }
-export async function complete(transaction, code) {
-  let m;try{m=await metadata();}catch(error){throw stageError('Provider configuration',error);}
-  let tokens;try{tokens = await authenticatedForm(m.token_endpoint,new URLSearchParams({grant_type:'authorization_code',code,
+export async function post_GetToken(transaction,code,m=metadata()) {
+  try{return await authenticatedForm(m.token_endpoint,new URLSearchParams({grant_type:'authorization_code',code,
     redirect_uri:config.redirect,client_id:config.clientId,code_verifier:transaction.verifier}),config.tokenAudience||m.token_endpoint);}catch(error){throw stageError('Token exchange',error);}
-  if(typeof tokens.id_token!=='string'||typeof tokens.access_token!=='string') throw new Error('Incomplete token response');
-  const issuer=config.tokenIssuer || m.issuer;
-  const verification={issuer,audience:config.clientId,algorithms:['RS256','PS256'],clockTolerance:30};
-  let id;try{({payload:id}=await jwtVerify(tokens.id_token,jwks,{...verification,requiredClaims:['exp','iat','sub','nonce']}));}catch(error){throw stageError('ID token validation',error);}
-  if(!equal(id.nonce,transaction.nonce)||(Array.isArray(id.aud)&&id.aud.length>1&&id.azp!==config.clientId)||(id.azp&&id.azp!==config.clientId)) throw new Error('Invalid ID token');
-  let response;try{response=await request(m.userinfo_endpoint,{headers:{Authorization:'Bearer '+tokens.access_token,Accept:'application/json, application/jwt'}});}catch(error){throw stageError('UserInfo retrieval',error);}
+}
+export async function get_GetUserInfo(accessToken,m=metadata()) {
+  let response;try{response=await request(m.userinfo_endpoint,{headers:{Authorization:'Bearer '+accessToken,Accept:'application/json, application/jwt'}});}catch(error){throw stageError('UserInfo retrieval',error);}
   let body=(await response.text()).trim();
   if(body.split('.').length===5&&!body.startsWith('{')){
     if(!config.encryptionFile&&!config.encryptionJson) throw new Error('UserInfo encryption key required');
@@ -147,24 +123,39 @@ export async function complete(transaction, code) {
   }
   // Like Health Services, decode the UserInfo returned directly by the trusted HTTPS endpoint.
   // This is not a browser-provided token. ID token signature, nonce and matching subject remain mandatory.
-  let info;try{info=body.startsWith('{')?JSON.parse(body):decodeJwt(body);}catch(error){throw stageError('UserInfo decoding',error);}
+  try{return body.startsWith('{')?JSON.parse(body):decodeJwt(body);}catch(error){throw stageError('UserInfo decoding',error);}
+}
+export async function complete(transaction, code) {
+  let m;try{m=await metadata();}catch(error){throw stageError('Provider configuration',error);}
+  const tokens=await post_GetToken(transaction,code,m);
+  if(typeof tokens.id_token!=='string'||typeof tokens.access_token!=='string') throw new Error('Incomplete token response');
+  const issuer=config.tokenIssuer || m.issuer;
+  const verification={issuer,audience:config.clientId,algorithms:['RS256','PS256'],clockTolerance:30};
+  let id;try{({payload:id}=await jwtVerify(tokens.id_token,jwks,{...verification,requiredClaims:['exp','iat','sub','nonce']}));}catch(error){throw stageError('ID token validation',error);}
+  if(!equal(id.nonce,transaction.nonce)||(Array.isArray(id.aud)&&id.aud.length>1&&id.azp!==config.clientId)||(id.azp&&id.azp!==config.clientId)) throw new Error('Invalid ID token');
+  const info=await get_GetUserInfo(tokens.access_token,m);
   validateSubject(id,info);
   // Same UserInfo mapping as Health Services; return consented attributes, never tokens.
   return selectProfile(info);
 }
 function stageError(stage,error){const safe=safeErrorCode(error);const wrapped=new Error(stage+' failed ('+safe+').');wrapped.code=safe;wrapped.publicMessage=wrapped.message;return wrapped;}
-export function selectProfile(info){
- // The reference Sidenav reads verified_claims before ordinary claims.
- const values={...info};for(const entry of Array.isArray(info.verified_claims)?info.verified_claims:[]){for(const [key,value] of Object.entries(entry?.claims||{}))if(value!=null)values[key]=value;}
- info=values;
- const result={};
- for(const key of ['name','given_name','birthdate','gender','email','email_verified','phone','phone_number','phone_number_verified','picture']){
-  const value=info[key];if(typeof value==='string'&&value.length<=(key==='picture'?3500000:4096))result[key]=value;
+export function selectProfile(info,profile=readProfileConfig()){
+ // Verified claims take precedence, just as in the Health Services profile view.
+ const values={...info};
+ for(const entry of Array.isArray(info.verified_claims)?info.verified_claims:[]){
+  for(const [key,value] of Object.entries(entry?.claims||{}))if(validClaim(key)&&value!=null)values[key]=value;
  }
- if(typeof info.address==='string'&&info.address.length<=8192)result.address=info.address;
- else if(info.address&&typeof info.address==='object'&&!Array.isArray(info.address)){
-  result.address={};for(const key of ['formatted','street_address','addressLine1','addressLine2','addressLine3','locality','city','province','region','postalCode','postal_code','country']){
-   if(typeof info.address[key]==='string'&&info.address[key].length<=4096)result.address[key]=info.address[key];
+ const result={};
+ const addressKeys=['formatted','street_address','addressLine1','addressLine2','addressLine3','locality','city','province','region','postalCode','postal_code','country'];
+ for(const field of profile.fields){
+  for(const key of [field.claim,...(field.aliases||[])]){
+   if(!validClaim(key)||!Object.hasOwn(values,key))continue;
+   const value=values[key];
+   if(field.type==='address'&&value&&typeof value==='object'&&!Array.isArray(value)){
+    result[key]=Object.fromEntries(addressKeys.filter(k=>typeof value[k]==='string'&&value[k].length<=4096).map(k=>[k,value[k]]));
+   }else if(typeof value==='string'&&value.length<=(field.type==='picture'?3500000:field.type==='address'?8192:4096))result[key]=value;
+   else if(field.type!=='picture'&&field.type!=='address'&& !key.endsWith('_verified') &&(typeof value==='number'||typeof value==='boolean'))result[key]=value;
+   else if(field.type!=='picture'&&field.type!=='address'&&Array.isArray(value)&&value.length<=50&&value.every(v=>typeof v==='string'&&v.length<=4096))result[key]=value;
   }
  }
  return result;

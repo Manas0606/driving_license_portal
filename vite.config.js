@@ -1,5 +1,3 @@
-import { defineConfig } from 'vite';
-export default defineConfig({
-  server: { proxy: { '/api': 'http://localhost:8080' } },
-  build: { target: 'es2022' }
-});
+import {defineConfig} from 'vite';
+import {resolve} from 'node:path';
+export default defineConfig({root:resolve('mock-relying-party-ui'),envDir:resolve('.'),build:{target:'es2022',outDir:resolve('dist'),emptyOutDir:true}});

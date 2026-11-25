@@ -1,0 +1,51 @@
+{
+  "fields": [
+    {
+      "claim": "name",
+      "label": "Full name",
+      "essential": true,
+      "aliases": [
+        "given_name"
+      ]
+    },
+    {
+      "claim": "birthdate",
+      "label": "Date of birth",
+      "essential": false
+    },
+    {
+      "claim": "gender",
+      "label": "Gender",
+      "essential": false
+    },
+    {
+      "claim": "email",
+      "label": "Email address",
+      "essential": false,
+      "aliases": [
+        "email_verified"
+      ]
+    },
+    {
+      "claim": "phone_number",
+      "label": "Phone number",
+      "essential": false,
+      "aliases": [
+        "phone_number_verified",
+        "phone"
+      ]
+    },
+    {
+      "claim": "address",
+      "label": "Address",
+      "essential": false,
+      "type": "address"
+    },
+    {
+      "claim": "picture",
+      "label": "Profile photo",
+      "essential": false,
+      "type": "picture"
+    }
+  ]
+}

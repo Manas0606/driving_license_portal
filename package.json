@@ -7,11 +7,11 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
+    "dev": "npm run build && npm start",
     "build": "vite build",
-    "start": "node --env-file-if-exists=.env server/index.js",
+    "start": "node --env-file-if-exists=.env mock-relying-party-service/index.js",
     "test": "node --test",
-    "check": "node --check server/index.js && node --check server/app.js && node --check src/session.js && node --check server/oidc.js && node --check src/main.js && node --check src/identity-config.js && node --check src/profile.js && node --check api/fetchUserInfo.js && node --check src/locale.js"
+    "check": "node --check mock-relying-party-service/index.js && node --check mock-relying-party-service/app.js && node --check mock-relying-party-service/config.js && node --check mock-relying-party-service/esignetService.js && node --check mock-relying-party-ui/src/session.js && node --check mock-relying-party-ui/src/main.js && node --check mock-relying-party-ui/src/identity-config.js && node --check mock-relying-party-ui/src/profile.js && node --check mock-relying-party-ui/src/locale.js"
   },
   "dependencies": {
     "@mosip/sign-in-with-esignet": "0.1.1-beta.0",

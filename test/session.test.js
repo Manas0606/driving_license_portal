@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {validateBrowserTransaction} from '../server/oidc.js';
-import {startTransaction,consumeTransaction,clearSession,storeProfile,getProfile,addApplication,getApplications} from '../src/session.js';
+import {validateBrowserTransaction} from '../mock-relying-party-service/esignetService.js';
+import {startTransaction,consumeTransaction,clearSession,storeProfile,getProfile,addApplication,getApplications} from '../mock-relying-party-ui/src/session.js';
 const storage=new Map();
 Object.defineProperty(globalThis,'sessionStorage',{value:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},configurable:true});
 test('browser transaction is random, consumed and validated',()=>{

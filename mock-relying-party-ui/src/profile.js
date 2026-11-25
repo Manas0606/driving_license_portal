@@ -14,6 +14,19 @@ export function pictureSource(value){
  if(/^iVBORw0KGgo[A-Za-z0-9+/=]+$/.test(value))return 'data:image/png;base64,'+value;
  return '';
 }
-export function profileFields(info){
- return [['Full name',textValue(info.given_name)||textValue(info.name)],['Date of birth',textValue(info.birthdate)],['Gender',textValue(info.gender)],['Email address',textValue(info.email_verified)||textValue(info.email)],['Phone number',textValue(info.phone_number_verified)||textValue(info.phone)||textValue(info.phone_number)],['Address',formatAddress(info.address)]];
+function displayValue(value){
+ if(typeof value==='string')return value.trim();
+ if(typeof value==='number'||typeof value==='boolean')return String(value);
+ if(Array.isArray(value))return value.map(displayValue).filter(Boolean).join(', ');
+ return '';
+}
+export function profileFields(info,fields){
+ return fields.filter(field=>field.type!=='picture').map(field=>{
+  const keys=[...(field.aliases||[]),field.claim];
+  const value=keys.map(key=>{
+   if(key.endsWith('_verified')&&typeof info[key]!=='string')return '';
+   return field.type==='address'?formatAddress(info[key]):displayValue(info[key]);
+  }).find(Boolean)||'';
+  return [field.label,value];
+ });
 }
