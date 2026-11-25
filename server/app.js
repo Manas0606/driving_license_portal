@@ -35,7 +35,7 @@ app.get('/api/auth/callback',(req,res)=>{
   for(const key of ['code','state','error']){
     const value=req.query[key];if(typeof value==='string'&&value.length<=4096)query.set(key,value);
   }
-  res.redirect(303,'/?'+query.toString());
+  res.redirect(303,'/userprofile?'+query.toString());
 });
 // Same relying-party exchange pattern as MOSIP Health Services.
 app.post('/api/fetchUserInfo',rateLimit({windowMs:60_000,limit:15}),async(req,res)=>{
@@ -45,7 +45,7 @@ app.post('/api/fetchUserInfo',rateLimit({windowMs:60_000,limit:15}),async(req,re
   if(typeof code!=='string'||!code||code.length>4096)return res.status(400).json({error:'Invalid authorization code'});
   try {
     const identity=await complete(tx,code);
-    res.json({name:identity.name.slice(0,160),birthdate:identity.birthdate?.slice(0,10)||null});
+    res.json(identity);
   } catch(error) {
     console.error('eSignet exchange failed:',error.code||error.name);
     res.status(502).json({error:'Identity verification failed. Please sign in again.'});
@@ -53,6 +53,6 @@ app.post('/api/fetchUserInfo',rateLimit({windowMs:60_000,limit:15}),async(req,re
 });
 app.use('/api',(req,res)=>res.status(404).json({error:'Not found'}));
 app.use(express.static(resolve('dist'),{index:'index.html'}));
-app.get('/',(req,res)=>res.sendFile(resolve('dist/index.html')));
+app.get(['/', '/userprofile'],(req,res)=>res.sendFile(resolve('dist/index.html')));
 app.use((err,req,res,next)=>{if(res.headersSent)return next(err);console.error('Request failed:',err.name);res.status(err.status===400?400:500).json({error:'Unable to complete the request. Please try again.'});});
 export { app };

@@ -13,10 +13,11 @@ export function consumeTransaction(state){
   if(!tx||tx.state!==state||Date.now()>=tx.expiresAt)throw new Error('Invalid or expired sign-in request. Please sign in again.');
   return tx;
 }
-export function clearSession(){for(const key of [TX,PROFILE,APPLICATIONS])sessionStorage.removeItem(key);}
-export function storeProfile(profile){clearSession();set(PROFILE,{profile,expiresAt:Date.now()+1800000});}
+export function clearSession(){memoryProfile=null;for(const key of [TX,PROFILE,APPLICATIONS])sessionStorage.removeItem(key);}
+let memoryProfile=null;
+export function storeProfile(profile){clearSession();const item={profile,expiresAt:Date.now()+1800000};memoryProfile=item;try{set(PROFILE,item);}catch{/* Large photos can exceed browser storage quota; keep the current profile in memory. */}}
 export function getProfile(){
-  const item=get(PROFILE);if(!item)return null;
+  const item=memoryProfile||get(PROFILE);if(!item)return null;
   if(Date.now()>=item.expiresAt){clearSession();return null;}return item.profile;
 }
 export function getApplications(){if(!getProfile())return [];return get(APPLICATIONS)||[];}

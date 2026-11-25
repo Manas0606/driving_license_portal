@@ -90,6 +90,7 @@ export async function pushedRequest(transaction) {
   const form = new URLSearchParams({response_type:'code',client_id:config.clientId,redirect_uri:config.redirect,scope:config.scope,
     state:transaction.state,nonce:transaction.nonce,code_challenge:challenge(transaction.verifier),code_challenge_method:'S256'});
   if(config.acr) form.set('acr_values',config.acr);
+  form.set('claims',JSON.stringify({userinfo:{name:{essential:true},picture:{essential:false},birthdate:{essential:false},gender:{essential:false},email:{essential:false},phone_number:{essential:false},address:{essential:false}},id_token:{}}));
   const result=await authenticatedForm(m.pushed_authorization_request_endpoint,form);
   if(typeof result.request_uri !== 'string') throw new Error('Invalid PAR response');
   return result.request_uri;
@@ -114,8 +115,19 @@ export async function complete(transaction, code) {
   }
   const info=body.startsWith('{')?JSON.parse(body):(await jwtVerify(body,jwks,verification)).payload;
   validateSubject(id,info);
-  // Return only a minimal profile to the reference UI; no tokens are exposed.
-  return {
-    name:typeof info.name==='string'?info.name:typeof info.given_name==='string'?info.given_name:'Resident',
-    birthdate:typeof info.birthdate==='string'?info.birthdate:null};
+  // Same UserInfo mapping as Health Services; return consented attributes, never tokens.
+  return selectProfile(info);
+}
+export function selectProfile(info){
+ const result={};
+ for(const key of ['name','given_name','birthdate','gender','email','email_verified','phone','phone_number','phone_number_verified','picture']){
+  const value=info[key];if(typeof value==='string'&&value.length<=(key==='picture'?3500000:4096))result[key]=value;
+ }
+ if(typeof info.address==='string'&&info.address.length<=8192)result.address=info.address;
+ else if(info.address&&typeof info.address==='object'&&!Array.isArray(info.address)){
+  result.address={};for(const key of ['formatted','street_address','addressLine1','addressLine2','addressLine3','locality','city','province','region','postalCode','postal_code','country']){
+   if(typeof info.address[key]==='string'&&info.address[key].length<=4096)result.address[key]=info.address[key];
+  }
+ }
+ return result;
 }

@@ -3,6 +3,7 @@ import { icon } from './icons.js';
 import {startTransaction,consumeTransaction,clearSession,storeProfile,getProfile,getApplications,addApplication} from './session.js';
 import {validateApplication} from '../server/domain.js';
 import {portalOrigin,clientId,authorizeUri,scope,acr,usePar,redirectUri,pkceChallenge} from './identity-config.js';
+import {pictureSource,profileFields} from './profile.js';
 import './styles.css';
 
 const root=document.querySelector('#app');
@@ -35,13 +36,18 @@ async function setupButton(mount){
  // The official plugin renders immediately from public config, just as Health Services does.
  mount.textContent='';
  init({oidcConfig:{authorizeUri,redirect_uri:redirectUri,client_id:clientId,scope,
-  state:transaction.state,nonce:transaction.nonce,acr_values:acr,display:'page',ui_locales:'en',
+  state:transaction.state,nonce:transaction.nonce,acr_values:acr,display:'page',prompt:'consent',ui_locales:'en',
+  claims:{userinfo:{name:{essential:true},picture:{essential:false},birthdate:{essential:false},gender:{essential:false},email:{essential:false},phone_number:{essential:false},address:{essential:false}},id_token:{}},
   code_challenge:async()=>({code_challenge:challenge,code_challenge_method:'S256'}),
   ...(usePar?{par_callback:async()=> (await api('/auth/par','POST',{transaction})).request_uri,par_callback_timeout:12000}:{})},
   buttonConfig:{shape:'soft_edges',labelText:'Sign in with',width:'100%'},signInElement:mount});
 }
+function identityCard(profile){
+ const picture=pictureSource(profile.picture);
+ return `<section class="identity-card" aria-label="Consented identity details"><div class="identity-photo">${picture?`<img src="${escape(picture)}" alt="Your profile photo">`:`<div class="photo-placeholder">${icon('card')}<small>No photo shared</small></div>`}<span class="identity-pill">${icon('shield')} Identity profile</span></div><div class="identity-content"><div class="eyebrow">YOUR PERSONAL INFORMATION</div><h2>Driver profile</h2><p>Details shared with your consent.</p><dl class="profile-fields">${profileFields(profile).map(([label,value])=>`<div><dt>${escape(label)}</dt><dd>${escape(value||'Not shared')}</dd></div>`).join('')}</dl></div></section>`;
+}
 function dashboard(profile){
- root.innerHTML=layout(`<section class="dashboard-top"><div class="eyebrow"><span></span> YOUR DRIVER WORKSPACE</div><h1>Hello, <span class="gradient-text">${escape(profile.name)}.</span></h1><p>Manage your journey, one step at a time.</p><span class="identity-pill">${icon('shield')} Digital identity profile</span></section><section id="services" class="section"><div class="section-head"><div><div class="eyebrow">AVAILABLE SERVICES</div><h2>Start an application</h2></div></div><div class="services-grid">${cards()}</div></section><section id="how" class="section"><div class="section-head"><div><div class="eyebrow">YOUR ACTIVITY</div><h2>Application tracker</h2></div><button class="secondary" id="reload">${icon('refresh')} Refresh</button></div><p id="notice" role="status" hidden></p><div id="applications" class="tracker">Loading applications…</div></section><dialog id="application-dialog"><form id="application-form"><div class="dialog-head"><div><div class="eyebrow">NEW REQUEST</div><h2 id="form-title"></h2></div><button type="button" id="close-dialog" class="text-button" aria-label="Close form">✕</button></div><p>Demo only. Requests disappear on logout or session expiry; no real licence or appointment is issued.</p><label>Vehicle category<select name="category" required><option value="">Select category</option><option>Motorcycle</option><option>Passenger car</option><option>Commercial vehicle</option></select></label><label id="reference-label" hidden>Existing licence reference<input name="licenceReference" maxlength="32" pattern="[A-Za-z0-9-]{4,32}"></label><label>Preferred appointment date<input type="date" name="appointment" required></label><label class="check-label"><input name="declaration" type="checkbox" required> I understand this is a temporary demonstration request.</label><p role="alert" id="form-error"></p><button class="primary" type="submit">Submit request ${icon('arrow')}</button></form></dialog>`,true);
+ root.innerHTML=layout(`<section class="dashboard-top"><div class="eyebrow"><span></span> YOUR DRIVER WORKSPACE</div><h1>Hello, <span class="gradient-text">${escape(profile.given_name||profile.name||'Resident')}.</span></h1><p>Manage your journey, one step at a time.</p><span class="identity-pill">${icon('shield')} Digital identity profile</span></section>${identityCard(profile)}<section id="services" class="section"><div class="section-head"><div><div class="eyebrow">AVAILABLE SERVICES</div><h2>Start an application</h2></div></div><div class="services-grid">${cards()}</div></section><section id="how" class="section"><div class="section-head"><div><div class="eyebrow">YOUR ACTIVITY</div><h2>Application tracker</h2></div><button class="secondary" id="reload">${icon('refresh')} Refresh</button></div><p id="notice" role="status" hidden></p><div id="applications" class="tracker">Loading applications…</div></section><dialog id="application-dialog"><form id="application-form"><div class="dialog-head"><div><div class="eyebrow">NEW REQUEST</div><h2 id="form-title"></h2></div><button type="button" id="close-dialog" class="text-button" aria-label="Close form">✕</button></div><p>Demo only. Requests disappear on logout or session expiry; no real licence or appointment is issued.</p><label>Vehicle category<select name="category" required><option value="">Select category</option><option>Motorcycle</option><option>Passenger car</option><option>Commercial vehicle</option></select></label><label id="reference-label" hidden>Existing licence reference<input name="licenceReference" maxlength="32" pattern="[A-Za-z0-9-]{4,32}"></label><label>Preferred appointment date<input type="date" name="appointment" required></label><label class="check-label"><input name="declaration" type="checkbox" required> I understand this is a temporary demonstration request.</label><p role="alert" id="form-error"></p><button class="primary" type="submit">Submit request ${icon('arrow')}</button></form></dialog>`,true);
  document.querySelector('#logout').onclick=()=>{clearSession();location.assign('/');};
  document.querySelector('#reload').onclick=loadApplications;
  const dialog=document.querySelector('#application-dialog'),form=document.querySelector('#application-form');
@@ -55,7 +61,7 @@ async function loadApplications(){const el=document.querySelector('#applications
 async function boot(){
  const query=new URLSearchParams(location.search);
  if(query.has('code')||query.has('error')){
-  history.replaceState(null,'','/');
+  history.replaceState(null,'','/userprofile');
   root.textContent='Completing secure sign-in…';
   try{
    const transaction=consumeTransaction(query.get('state'));
@@ -65,6 +71,7 @@ async function boot(){
   }catch(error){clearSession();landing();notify(error.message);return;}
  }
  const profile=getProfile();if(profile){dashboard(profile);return;}
+ if(location.pathname==='/userprofile'||location.pathname==='/api/auth/callback')history.replaceState(null,'','/');
  landing();
 }
 // Only the registered origin may start the browser-based login flow.
