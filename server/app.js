@@ -48,7 +48,7 @@ app.post('/api/fetchUserInfo',rateLimit({windowMs:60_000,limit:15}),async(req,re
     res.json(identity);
   } catch(error) {
     console.error('eSignet exchange failed:',error.code||error.name);
-    res.status(502).json({error:'Identity verification failed. Please sign in again.'});
+    res.status(502).json({error:error.publicMessage||'Identity verification failed. Please sign in again.'});
   }
 });
 app.use('/api',(req,res)=>res.status(404).json({error:'Not found'}));

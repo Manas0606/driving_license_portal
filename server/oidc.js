@@ -1,6 +1,6 @@
 import { randomBytes, createHash, timingSafeEqual, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { SignJWT, importJWK, createRemoteJWKSet, jwtVerify, compactDecrypt } from 'jose';
+import { SignJWT, importJWK, createRemoteJWKSet, jwtVerify, compactDecrypt, decodeJwt } from 'jose';
 
 export const random = () => randomBytes(32).toString('base64url');
 export const challenge = verifier => createHash('sha256').update(verifier).digest('base64url');
@@ -28,7 +28,7 @@ export function validateSubject(id, info) {
 const config = {
   discovery: process.env.ESIGNET_DISCOVERY_URL || 'https://esignet.mosip-demo.mosip.net/.well-known/openid-configuration',
   issuer: process.env.ESIGNET_EXPECTED_ISSUER || 'https://esignet.mosip-demo.mosip.net',
-  tokenIssuer: process.env.ESIGNET_TOKEN_ISSUER,
+  tokenIssuer: process.env.ESIGNET_TOKEN_ISSUER || 'https://esignet.mosip-demo.mosip.net/v1/esignet',
   clientId: process.env.ESIGNET_CLIENT_ID || '1IQWpkTghWJkAMXnwX3AYiUmFYA20wdw-CnRICPW1uI',
   keyFile: process.env.ESIGNET_PRIVATE_JWK_FILE,
   keyJson: process.env.ESIGNET_PRIVATE_JWK,
@@ -48,12 +48,18 @@ function trustedUrl(value) {
 }
 async function request(url, options = {}) {
   const response = await fetch(trustedUrl(url), { ...options, redirect: 'error', signal: AbortSignal.timeout(12000) });
-  if (!response.ok) throw new Error('Identity provider request failed');
+  if (!response.ok) { const error=new Error('Identity provider HTTP '+response.status);error.code='IDP_HTTP_'+response.status;throw error; }
   return response;
 }
 async function metadata() {
   if (cached && cached.until > Date.now()) return cached.data;
-  const data = await (await request(config.discovery)).json();
+  let data;
+  try{data=await (await request(config.discovery)).json();}catch(error){
+    // IIITB 1.4.1 exposes the discovery controller directly here.
+    const fallback=new URL('/v1/esignet/oidc/.well-known/openid-configuration',config.discovery).href;
+    if(fallback===config.discovery)throw error;
+    data=await (await request(fallback)).json();
+  }
   if (data.issuer !== config.issuer) throw new Error('Discovery issuer mismatch');
   for (const key of ['authorization_endpoint','token_endpoint','userinfo_endpoint','jwks_uri']) trustedUrl(data[key]);
   if (config.par) trustedUrl(data.pushed_authorization_request_endpoint);
@@ -62,7 +68,9 @@ async function metadata() {
   return data;
 }
 async function assertion(audience) {
-  const jwk = JSON.parse(config.keyJson || await readFile(config.keyFile, 'utf8'));
+  const raw=config.keyJson || await readFile(config.keyFile, 'utf8');
+  const parsed=JSON.parse(raw.trim().startsWith('{')?raw:Buffer.from(raw,'base64').toString('utf8'));
+  const jwk=parsed.keys?.[0]||parsed;
   if (jwk.kty !== 'RSA' || !jwk.d || !jwk.kid) throw new Error('Invalid RP signing key');
   const key = await importJWK(jwk, 'RS256');
   return new SignJWT({}).setProtectedHeader({ alg:'RS256', kid:jwk.kid })
@@ -96,15 +104,15 @@ export async function pushedRequest(transaction) {
   return result.request_uri;
 }
 export async function complete(transaction, code) {
-  const m = await metadata();
-  const tokens = await authenticatedForm(m.token_endpoint,new URLSearchParams({grant_type:'authorization_code',code,
-    redirect_uri:config.redirect,client_id:config.clientId,code_verifier:transaction.verifier}));
+  let m;try{m=await metadata();}catch(error){throw stageError('Discovery',error);}
+  let tokens;try{tokens = await authenticatedForm(m.token_endpoint,new URLSearchParams({grant_type:'authorization_code',code,
+    redirect_uri:config.redirect,client_id:config.clientId,code_verifier:transaction.verifier}));}catch(error){throw stageError('Token exchange',error);}
   if(typeof tokens.id_token!=='string'||typeof tokens.access_token!=='string') throw new Error('Incomplete token response');
   const issuer=config.tokenIssuer || m.issuer;
   const verification={issuer,audience:config.clientId,algorithms:['RS256','PS256'],clockTolerance:30};
-  const {payload:id}=await jwtVerify(tokens.id_token,jwks,{...verification,requiredClaims:['exp','iat','sub','nonce']});
+  let id;try{({payload:id}=await jwtVerify(tokens.id_token,jwks,{...verification,requiredClaims:['exp','iat','sub','nonce']}));}catch(error){throw stageError('ID token validation',error);}
   if(!equal(id.nonce,transaction.nonce)||(Array.isArray(id.aud)&&id.aud.length>1&&id.azp!==config.clientId)||(id.azp&&id.azp!==config.clientId)) throw new Error('Invalid ID token');
-  const response=await request(m.userinfo_endpoint,{headers:{Authorization:'Bearer '+tokens.access_token,Accept:'application/json, application/jwt'}});
+  let response;try{response=await request(m.userinfo_endpoint,{headers:{Authorization:'Bearer '+tokens.access_token,Accept:'application/json, application/jwt'}});}catch(error){throw stageError('UserInfo retrieval',error);}
   let body=(await response.text()).trim();
   if(body.split('.').length===5&&!body.startsWith('{')){
     if(!config.encryptionFile&&!config.encryptionJson) throw new Error('UserInfo encryption key required');
@@ -113,12 +121,18 @@ export async function complete(transaction, code) {
     body=new TextDecoder().decode(decrypted.plaintext);
     if(body.startsWith('{')) throw new Error('Encrypted UserInfo must contain a signed JWT');
   }
-  const info=body.startsWith('{')?JSON.parse(body):(await jwtVerify(body,jwks,verification)).payload;
+  // Like Health Services, decode the UserInfo returned directly by the trusted HTTPS endpoint.
+  // This is not a browser-provided token. ID token signature, nonce and matching subject remain mandatory.
+  let info;try{info=body.startsWith('{')?JSON.parse(body):decodeJwt(body);}catch(error){throw stageError('UserInfo decoding',error);}
   validateSubject(id,info);
   // Same UserInfo mapping as Health Services; return consented attributes, never tokens.
   return selectProfile(info);
 }
+function stageError(stage,error){const code=error.code||error.name||'ERROR';const safe=/^[A-Za-z0-9_]{1,80}$/.test(code)?code:'ERROR';const wrapped=new Error(stage+' failed ('+safe+').');wrapped.code=safe;wrapped.publicMessage=wrapped.message;return wrapped;}
 export function selectProfile(info){
+ // The reference Sidenav reads verified_claims before ordinary claims.
+ const values={...info};for(const entry of Array.isArray(info.verified_claims)?info.verified_claims:[]){for(const [key,value] of Object.entries(entry?.claims||{}))if(value!=null)values[key]=value;}
+ info=values;
  const result={};
  for(const key of ['name','given_name','birthdate','gender','email','email_verified','phone','phone_number','phone_number_verified','picture']){
   const value=info[key];if(typeof value==='string'&&value.length<=(key==='picture'?3500000:4096))result[key]=value;
