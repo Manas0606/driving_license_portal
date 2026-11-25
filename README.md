@@ -50,3 +50,6 @@ This is a security-conscious demo baseline, not an audited production licensing 
 - test/ — state, PKCE, validation and subject checks
 - scripts/ — local key generation
 - compose.yaml / Dockerfile — local deployment
+
+## Vercel Hobby + Neon Free deployment
+Import this Git repository with the Vite preset, root `./`, build `npm run build`, output `dist`. The API is a catch-all Node function; no Docker container is needed. Set production environment variables `DATABASE_URL` (Neon pooled TLS connection string), `SESSION_SECRET` (random 32+ characters), and `APP_ORIGIN` (exact production HTTPS origin). Configure `ESIGNET_CLIENT_ID` and `ESIGNET_PRIVATE_JWK` (private JWK JSON, sensitive environment variable) only after the relying party is registered. Optional `ESIGNET_USERINFO_JWK` holds a separate decryption key. The callback is `/api/auth/callback`. Do not expose database URLs or JWKs in Vite variables. Preview domains are not registered callback origins.

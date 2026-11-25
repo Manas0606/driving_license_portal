@@ -27,13 +27,15 @@ const config = {
   tokenIssuer: process.env.ESIGNET_TOKEN_ISSUER,
   clientId: process.env.ESIGNET_CLIENT_ID,
   keyFile: process.env.ESIGNET_PRIVATE_JWK_FILE,
+  keyJson: process.env.ESIGNET_PRIVATE_JWK,
   encryptionFile: process.env.ESIGNET_USERINFO_JWK_FILE,
-  redirect: new URL('/api/auth/callback', process.env.APP_ORIGIN || 'http://localhost:8080').href,
+  encryptionJson: process.env.ESIGNET_USERINFO_JWK,
+  redirect: new URL('/api/auth/callback', process.env.APP_ORIGIN || (process.env.VERCEL_PROJECT_PRODUCTION_URL?'https://'+process.env.VERCEL_PROJECT_PRODUCTION_URL:'http://localhost:8080')).href,
   scope: process.env.ESIGNET_SCOPE || 'openid profile',
   acr: process.env.ESIGNET_ACR,
   par: process.env.ESIGNET_USE_PAR === 'true'
 };
-export const isConfigured = () => Boolean(config.clientId && config.keyFile);
+export const isConfigured = () => Boolean(config.clientId && (config.keyFile || config.keyJson));
 let cached, jwks;
 function trustedUrl(value) {
   const url = new URL(value);
@@ -56,7 +58,7 @@ async function metadata() {
   return data;
 }
 async function assertion(audience) {
-  const jwk = JSON.parse(await readFile(config.keyFile, 'utf8'));
+  const jwk = JSON.parse(config.keyJson || await readFile(config.keyFile, 'utf8'));
   if (jwk.kty !== 'RSA' || !jwk.d || !jwk.kid) throw new Error('Invalid RP signing key');
   const key = await importJWK(jwk, 'RS256');
   return new SignJWT({}).setProtectedHeader({ alg:'RS256', kid:jwk.kid })
@@ -100,8 +102,8 @@ export async function complete(transaction, code) {
   const response=await request(m.userinfo_endpoint,{headers:{Authorization:'Bearer '+tokens.access_token,Accept:'application/json, application/jwt'}});
   let body=(await response.text()).trim();
   if(body.split('.').length===5&&!body.startsWith('{')){
-    if(!config.encryptionFile) throw new Error('UserInfo encryption key required');
-    const key=await importJWK(JSON.parse(await readFile(config.encryptionFile,'utf8')),'RSA-OAEP-256');
+    if(!config.encryptionFile&&!config.encryptionJson) throw new Error('UserInfo encryption key required');
+    const key=await importJWK(JSON.parse(config.encryptionJson || await readFile(config.encryptionFile,'utf8')),'RSA-OAEP-256');
     const decrypted=await compactDecrypt(body,key,{keyManagementAlgorithms:['RSA-OAEP-256'],contentEncryptionAlgorithms:['A256GCM','A128GCM','A256CBC-HS512']});
     body=new TextDecoder().decode(decrypted.plaintext);
     if(body.startsWith('{')) throw new Error('Encrypted UserInfo must contain a signed JWT');
