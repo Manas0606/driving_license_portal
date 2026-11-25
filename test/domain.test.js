@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {validateApplication} from '../server/domain.js';
+import {newTransaction,validateTransaction,challenge,validateSubject} from '../server/oidc.js';
+const valid={service:'NEW',category:'Passenger car',appointment:'2026-12-01',declaration:true};
+test('valid application',()=>assert.equal(validateApplication(valid,'2026-11-25').service,'NEW'));
+test('rejects invalid service, date, declaration and missing reference',()=>{for(const patch of [{service:'constructor'},{appointment:'2026-02-30'},{appointment:'2027-12-01'},{declaration:false},{service:'RENEWAL'}])assert.throws(()=>validateApplication({...valid,...patch},'2026-11-25'));});
+test('PKCE RFC 7636 example',()=>assert.equal(challenge('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk'),'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM'));
+test('state and transaction expiry',()=>{const tx=newTransaction();validateTransaction(tx,tx.state);assert.throws(()=>validateTransaction(tx,'wrong'));assert.throws(()=>validateTransaction({...tx,expiresAt:0},tx.state));});
+test('rejects different or absent subject',()=>{validateSubject({sub:'a'},{sub:'a'});assert.throws(()=>validateSubject({sub:'a'},{sub:'b'}));assert.throws(()=>validateSubject({},{}));});
