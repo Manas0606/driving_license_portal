@@ -11,14 +11,11 @@
     "build": "vite build",
     "start": "node --env-file-if-exists=.env server/index.js",
     "test": "node --test",
-    "check": "node --check server/index.js && node --check server/oidc.js && node --check src/main.js"
+    "check": "node --check server/index.js && node --check server/app.js && node --check server/session.js && node --check server/oidc.js && node --check src/main.js"
   },
   "dependencies": {
     "@mosip/sign-in-with-esignet": "0.1.1-beta.0",
     "express": "5.1.0",
-    "express-session": "1.18.1",
-    "connect-pg-simple": "10.0.0",
-    "pg": "8.16.3",
     "jose": "6.1.0",
     "helmet": "8.1.0",
     "express-rate-limit": "8.1.0"
