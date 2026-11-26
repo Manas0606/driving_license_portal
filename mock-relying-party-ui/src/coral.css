@@ -85,3 +85,5 @@ input,select{color:#503a40;background:#fffdfa;border-color:#dcb6a6}#form-error{c
 @media(max-width:1020px){.hero{grid-template-columns:1fr 1.15fr;gap:23px;padding-top:45px}.hero h1{font-size:clamp(39px,5.4vw,65px)}.signin-panel{grid-template-columns:1fr minmax(230px,330px)}.licence-motion{display:none}.cinematic-stage{min-height:285px}}
 @media(max-width:730px){header{padding:16px 5%}.hero{grid-template-columns:1fr;padding-top:40px;gap:23px}.hero h1{font-size:clamp(44px,10vw,70px)}.hero p{max-width:none}.cinematic-stage{min-height:0;aspect-ratio:1.45;border-radius:18px}.signin-panel{grid-template-columns:1fr;padding:23px;gap:19px}.signin-action{padding:13px}.cinematic-live{display:none}.hero-art{margin:0}.cinematic-bottom strong{font-size:20px}.cinematic-bottom small{font-size:8px}.motion-control{width:35px;height:35px}.dashboard-top{padding-top:42px}}
 @media(prefers-reduced-motion:reduce){.canyon-scene *,.licence-motion *,.ignition-needle,.cinematic-timeline span{animation:none!important}.cinematic-film{transition:none}}
+
+.cinematic-stage[data-film=true] .canyon-scene *{animation-play-state:paused!important}

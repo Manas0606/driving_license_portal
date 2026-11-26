@@ -22,7 +22,7 @@ export default function CinematicHero(){
   if(paused||!visible)player.pause();
   else player.play().catch(()=>setPaused(true));
  },[paused,visible,film]);
- return <div className="cinematic-stage" ref={stage} data-paused={paused||!visible||film?'true':'false'}>
+ return <div className="cinematic-stage" ref={stage} data-paused={paused||!visible?'true':'false'} data-film={film?'true':'false'}>
   <CanyonDrive/>
   {hasFilm&&<video ref={video} className={'cinematic-film '+(film?'ready':'')} src="/cinematic/coral-grand-tour.mp4" muted loop playsInline preload="metadata" aria-hidden="true" onLoadedData={()=>setFilm(true)} onCanPlay={()=>setFilm(true)} onError={()=>{setHasFilm(false);setFilm(false);}}/>}
   <div className="cinematic-vignette"/>
