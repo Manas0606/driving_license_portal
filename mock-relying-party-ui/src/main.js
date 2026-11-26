@@ -67,8 +67,7 @@ async function boot(){
  const query=new URLSearchParams(location.search);
  if(query.has('code')||query.has('error')){
   history.replaceState(null,'','/userprofile');
-  root.innerHTML=layout(`<section class="auth-progress"><h2>${t('Completing secure sign-in…')}</h2><p role="status">Please keep this page open.</p><button id="cancel-auth" class="secondary">${t('Return to sign-in')}</button></section>`);
-  document.querySelector('#cancel-auth').onclick=()=>{clearSession();location.assign('/');};
+  root.innerHTML=layout(`<section class="auth-progress"><h2>${t('Completing secure sign-in…')}</h2><p role="status">Please keep this page open.</p></section>`);
   try{
    if(query.has('error')||!query.get('code'))throw new Error('Identity provider: '+(query.get('error')||'authorization code missing'));
    const transaction=consumeTransaction(query.get('state'));
