@@ -44,6 +44,6 @@ Edit `mock-relying-party-ui/public/locales/default.json` and create a matching J
 
 The app is a mock RP, not an audited production system. Local logout clears browser sessionStorage; it does not terminate the provider session. Only explicitly configured, consented profile data is retained for the demo. Network access to the private demo environment must be authorized. Use HTTPS and a trusted gateway in a shared deployment. Keep keys private and rotate previously exposed keys.
 
-## Coral Grand Tour cinematic theme
+## Royal Premium theme
 
-The UI uses a warm coral, champagne and rose palette with a local vector canyon scene, an animated driver/car sequence, wheel and exhaust effects, floating licence artwork, and an ignition gauge. Pause control and reduced-motion preferences are respected. No extra service or dependency is required. If a local `mock-relying-party-ui/public/cinematic/coral-grand-tour.mp4` exists, the hero plays the optional silent cinematic montage; otherwise the vector scene remains available. The video is optional and is not required for build or sign-in. The existing authentication and business logic are unchanged.
+Design 07 uses a matte-black and champagne-gold palette with a fixed, full-viewport animated SVG night-road scene, moving city lights, driver entry, racing cars, exhaust flames and atmospheric gold particles. The scene sits behind the entire portal, not inside a card. On authenticated screens it is dimmed to improve readability. A pause control and reduced-motion preference are supported, and background animation pauses while the browser tab is hidden. No external media, packages or authentication changes are required. The artwork is resolution-independent vector animation, not native movie footage.

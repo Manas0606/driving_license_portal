@@ -9,8 +9,8 @@ import {consumeTransaction,clearSession,storeProfile,getProfile,getApplications,
 import {pictureSource,profileFields} from './profile.js';
 import {validateApplication} from '../../mock-relying-party-service/domain.js';
 import './styles.css';
-import './coral.css';
-import CinematicHero,{LicenceMotion,IgnitionGauge} from './components/CinematicHero.jsx';
+import './royal.css';
+import RoyalBackground,{LicenceMotion,IgnitionGauge} from './components/RoyalBackground.jsx';
 const services=[
  {id:'NEW',title:'New licence',desc:'Start your journey with a first driving licence application.',icon:'card',color:'cyan'},
  {id:'RENEWAL',title:'Renew licence',desc:'Keep your driving privileges up to date.',icon:'refresh',color:'violet'},
@@ -18,9 +18,9 @@ const services=[
  {id:'LEARNER',title:'Learner permit',desc:'Take the first step towards the open road.',icon:'book',color:'amber'}
 ];
 function Icon({name,cls=''}){return <span className="inline-icon" aria-hidden="true" dangerouslySetInnerHTML={{__html:icon(name,cls)}}/>;}
-function Layout({children,logged=false}){
+function Layout({children,logged=false,cinematic=false}){
  const {t,i18n}=useTranslation();
- return <><header><a className="brand" href="/" aria-label="DriveNext home"><span className="brand-icon"><img src="/logo.png" alt="" width="46" height="46"/></span><span>drive<span className="gradient-text">next.</span><small>DIGITAL MOBILITY</small></span></a><nav aria-label={t('Main navigation')}><a href="#services">{t('Services')}</a><a href="#how">{t('How it works')}</a><select className="language-select" aria-label={t('Language')} value={i18n.language} onChange={e=>i18n.changeLanguage(e.target.value)}>{Object.entries(languages).map(([code,label])=><option key={code} value={code}>{label}</option>)}</select>{logged&&<button className="text-button" onClick={()=>{clearSession();location.assign('/');}}>{t('Sign out')}</button>}</nav></header><main>{children}</main><footer><span>{t('DriveNext · A digital identity demonstration')}</span><span><Icon name="shield"/>{t('Secure digital access')}</span><span>{t('Not an official licensing authority')}</span></footer></>;
+ return <><RoyalBackground subdued={!cinematic}/><header><a className="brand" href="/" aria-label="DriveNext home"><span className="brand-icon"><img src="/logo.png" alt="" width="46" height="46"/></span><span>drive<span className="gradient-text">next.</span><small>DIGITAL MOBILITY</small></span></a><nav aria-label={t('Main navigation')}><a href="#services">{t('Services')}</a><a href="#how">{t('How it works')}</a><select className="language-select" aria-label={t('Language')} value={i18n.language} onChange={e=>i18n.changeLanguage(e.target.value)}>{Object.entries(languages).map(([code,label])=><option key={code} value={code}>{label}</option>)}</select>{logged&&<button className="text-button" onClick={()=>{clearSession();location.assign('/');}}>{t('Sign out')}</button>}</nav></header><main>{children}</main><footer><span>{t('DriveNext · A digital identity demonstration')}</span><span><Icon name="shield"/>{t('Secure digital access')}</span><span>{t('Not an official licensing authority')}</span></footer></>;
 }
 function ServiceCards({onSelect}){
  const {t}=useTranslation();
@@ -28,7 +28,7 @@ function ServiceCards({onSelect}){
 }
 function Landing(){
  const {t}=useTranslation();
- return <Layout><section className="hero"><div className="ambient a1"/><div className="ambient a2"/><div className="hero-copy"><div className="eyebrow"><span/>{t('THE FUTURE OF DIGITAL MOBILITY')}</div><h1>{t('Chase the')}<br/><span className="gradient-text">{t('horizon.')}</span></h1><p>{t('Apply, renew and manage your driving licence through one beautifully simple, identity-powered experience.')}</p><div className="hero-actions"><a className="primary" href="#signin">{t('Get on the road')} <Icon name="arrow"/></a><a className="secondary" href="#services">{t('Explore services')}</a></div><div className="trustline"><Icon name="shield"/>{t('Verified identity')} <b>·</b><Icon name="lock"/>{t('Secure consent')}</div></div><div className="hero-art"><CinematicHero/></div></section>
+ return <Layout cinematic><section className="hero"><div className="ambient a1"/><div className="ambient a2"/><div className="hero-copy"><div className="eyebrow"><span/>{t('THE FUTURE OF DIGITAL MOBILITY')}</div><h1>{t('Every journey')}<br/>{t('begins with')} <span className="gradient-text">{t('you.')}</span></h1><p>{t('Apply, renew and manage your driving licence through one beautifully simple, identity-powered experience.')}</p><div className="hero-actions"><a className="primary" href="#signin">{t('Get on the road')} <Icon name="arrow"/></a><a className="secondary" href="#services">{t('Explore services')}</a></div><div className="trustline"><Icon name="shield"/>{t('Verified identity')} <b>·</b><Icon name="lock"/>{t('Secure consent')}</div></div></section>
  <section className="signin-panel" id="signin"><div><div className="eyebrow">{t('SECURE ACCESS')}</div><h2>{t('Your identity is your key.')}</h2><p>{t('Use your national digital identity to access licensing services. Your credentials stay with your identity provider.')}</p></div><LicenceMotion/><div className="signin-action"><Login/><small><Icon name="lock"/>{t('Consent-based authentication · No portal password')}</small></div></section>
  <section id="services" className="section"><div className="section-head"><div><div className="eyebrow">{t('Services').toUpperCase()}</div><h2>{t('Where are you headed?')}</h2></div><p>{t('Everything you need for your next step.')}</p></div><ServiceCards onSelect={()=>document.getElementById('signin').scrollIntoView({behavior:'smooth'})}/></section>
  <section id="how" className="section how"><div className="eyebrow">{t('SIMPLE BY DESIGN')}</div><h2>{t('Three steps. A new direction.')}</h2><div className="steps">{[['shield','Verify your identity','Sign in and provide your consent.'],['card','Choose a service','Submit the relevant application and preferred date.'],['clock','Track your request','View temporary demonstration requests during your sign-in session.']].map(([name,title,desc],idx)=><div key={name}><span>0{idx+1} / <Icon name={name}/></span><h3>{t(title)}</h3><p>{t(desc)}</p></div>)}</div></section></Layout>;
