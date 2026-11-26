@@ -9,6 +9,8 @@ import {consumeTransaction,clearSession,storeProfile,getProfile,getApplications,
 import {pictureSource,profileFields} from './profile.js';
 import {validateApplication} from '../../mock-relying-party-service/domain.js';
 import './styles.css';
+import './coral.css';
+import CinematicHero,{LicenceMotion,IgnitionGauge} from './components/CinematicHero.jsx';
 const services=[
  {id:'NEW',title:'New licence',desc:'Start your journey with a first driving licence application.',icon:'card',color:'cyan'},
  {id:'RENEWAL',title:'Renew licence',desc:'Keep your driving privileges up to date.',icon:'refresh',color:'violet'},
@@ -26,8 +28,8 @@ function ServiceCards({onSelect}){
 }
 function Landing(){
  const {t}=useTranslation();
- return <Layout><section className="hero"><div className="ambient a1"/><div className="ambient a2"/><div className="hero-copy"><div className="eyebrow"><span/>{t('THE FUTURE OF DIGITAL MOBILITY')}</div><h1>{t('Every journey')}<br/>{t('begins with')} <span className="gradient-text">{t('you.')}</span></h1><p>{t('Apply, renew and manage your driving licence through one beautifully simple, identity-powered experience.')}</p><div className="hero-actions"><a className="primary" href="#signin">{t('Get on the road')} <Icon name="arrow"/></a><a className="secondary" href="#services">{t('Explore services')}</a></div><div className="trustline"><Icon name="shield"/>{t('Verified identity')} <b>·</b><Icon name="lock"/>{t('Secure consent')}</div></div><div className="hero-art"><img src="/mobility.svg" alt={t('Illustration of a futuristic vehicle travelling on an illuminated road')}/><span className="art-label"><i/>{t('DIGITAL FIRST · IDENTITY ENABLED')}</span><div className="floating-card"><span><Icon name="card"/></span><div><b>{t('One digital identity')}</b><small>{t('One seamless journey')}</small></div><Icon name="check" cls="verified"/></div></div></section>
- <section className="signin-panel" id="signin"><div><div className="eyebrow">{t('SECURE ACCESS')}</div><h2>{t('Your identity is your key.')}</h2><p>{t('Use your national digital identity to access licensing services. Your credentials stay with your identity provider.')}</p></div><div className="signin-action"><Login/><small><Icon name="lock"/>{t('Consent-based authentication · No portal password')}</small></div></section>
+ return <Layout><section className="hero"><div className="ambient a1"/><div className="ambient a2"/><div className="hero-copy"><div className="eyebrow"><span/>{t('THE FUTURE OF DIGITAL MOBILITY')}</div><h1>{t('Chase the')}<br/><span className="gradient-text">{t('horizon.')}</span></h1><p>{t('Apply, renew and manage your driving licence through one beautifully simple, identity-powered experience.')}</p><div className="hero-actions"><a className="primary" href="#signin">{t('Get on the road')} <Icon name="arrow"/></a><a className="secondary" href="#services">{t('Explore services')}</a></div><div className="trustline"><Icon name="shield"/>{t('Verified identity')} <b>·</b><Icon name="lock"/>{t('Secure consent')}</div></div><div className="hero-art"><CinematicHero/></div></section>
+ <section className="signin-panel" id="signin"><div><div className="eyebrow">{t('SECURE ACCESS')}</div><h2>{t('Your identity is your key.')}</h2><p>{t('Use your national digital identity to access licensing services. Your credentials stay with your identity provider.')}</p></div><LicenceMotion/><div className="signin-action"><Login/><small><Icon name="lock"/>{t('Consent-based authentication · No portal password')}</small></div></section>
  <section id="services" className="section"><div className="section-head"><div><div className="eyebrow">{t('Services').toUpperCase()}</div><h2>{t('Where are you headed?')}</h2></div><p>{t('Everything you need for your next step.')}</p></div><ServiceCards onSelect={()=>document.getElementById('signin').scrollIntoView({behavior:'smooth'})}/></section>
  <section id="how" className="section how"><div className="eyebrow">{t('SIMPLE BY DESIGN')}</div><h2>{t('Three steps. A new direction.')}</h2><div className="steps">{[['shield','Verify your identity','Sign in and provide your consent.'],['card','Choose a service','Submit the relevant application and preferred date.'],['clock','Track your request','View temporary demonstration requests during your sign-in session.']].map(([name,title,desc],idx)=><div key={name}><span>0{idx+1} / <Icon name={name}/></span><h3>{t(title)}</h3><p>{t(desc)}</p></div>)}</div></section></Layout>;
 }
@@ -69,7 +71,7 @@ export default function App(){
   fetchUserInfo();
  },[]);
  if(!clientDetails.clientId||!clientDetails.authorizeUri||!clientDetails.redirect_uri_userprofile||!requestedClaims()||new URL(clientDetails.redirect_uri_userprofile).origin!==location.origin)return <Layout><section className="auth-progress">{t('Check the runtime client configuration and registered portal origin.')}</section></Layout>;
- if(view.kind==='loading')return <Layout><section className="auth-progress"><h2>{t('Completing secure sign-in…')}</h2><p role="status">{t('Please keep this page open.')}</p></section></Layout>;
+ if(view.kind==='loading')return <Layout><section className="auth-progress"><IgnitionGauge/><h2>{t('Completing secure sign-in…')}</h2><p role="status">{t('Please keep this page open.')}</p></section></Layout>;
  if(view.kind==='error')return <Layout><section className="auth-progress"><h2>{t('Sign-in could not be completed')}</h2><p role="alert">{view.message}</p><button className="primary" onClick={()=>location.assign('/')}>{t('Return to sign-in')}</button></section></Layout>;
  if(view.kind==='profile')return <Dashboard profile={view.profile}/>;
  return <Landing/>;
