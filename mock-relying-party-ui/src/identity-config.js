@@ -8,6 +8,8 @@ export const usePar=env.USE_PAR===true;
 export const redirectUri=env.REDIRECT_URI_USER_PROFILE;
 export const requestedClaims=env.CLAIMS_USER_PROFILE;
 export const profileConfiguration=env.PROFILE_FIELDS||[];
+// Match Health Services clientDetails.js: UI locale is independent of claim locale.
+export const claimsLocales='en';
 export const display=env.DISPLAY||'page';
 export const prompt=env.PROMPT||'consent';
 export async function pkceChallenge(verifier){

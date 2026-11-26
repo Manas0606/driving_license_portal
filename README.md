@@ -38,7 +38,7 @@ Update the eSignet client registration, scopes, partner policy and provider mapp
 
 ## Add a language
 
-Edit `mock-relying-party-ui/public/locales/default.json` and create a matching JSON file, e.g. `fr.json`. The translation keys are the English labels found in en.json. Missing translations fall back to English. Add the language to rtlLanguages when appropriate. Refresh the page; no JavaScript rebuild is required. The selected code is passed as ui_locales/claims_locales to eSignet. The provider must separately support the language. Existing six languages keep their current translations; some detailed labels fall back to English.
+Edit `mock-relying-party-ui/public/locales/default.json` and create a matching JSON file, e.g. `fr.json`. The translation keys are the English labels found in en.json. Missing translations fall back to English. Add the language to rtlLanguages when appropriate. Refresh the page; no JavaScript rebuild is required. The selected code is passed as ui_locales to eSignet; claims_locales remains en, matching the Health Services login configuration. The provider must separately support the UI language. Existing six languages keep their current translations; some detailed labels fall back to English.
 
 ## Security and deployment
 

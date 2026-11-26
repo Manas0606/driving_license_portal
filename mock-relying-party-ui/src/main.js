@@ -2,7 +2,7 @@ import { init } from '@mosip/sign-in-with-esignet';
 import { icon } from './icons.js';
 import {startTransaction,consumeTransaction,clearSession,storeProfile,getProfile,getApplications,addApplication} from './session.js';
 import {validateApplication} from '../../mock-relying-party-service/domain.js';
-import {clientId,authorizeUri,scope,acr,usePar,redirectUri,pkceChallenge,requestedClaims,profileConfiguration,display,prompt} from './identity-config.js';
+import {clientId,authorizeUri,scope,acr,usePar,redirectUri,pkceChallenge,requestedClaims,profileConfiguration,display,prompt,claimsLocales} from './identity-config.js';
 import {pictureSource,profileFields} from './profile.js';
 import {locale,t,setLocale,loadLocales,localize,languageSelect} from './locale.js';
 import './styles.css';
@@ -39,7 +39,7 @@ async function setupButton(mount){
  // The official plugin renders immediately from public config, just as Health Services does.
  mount.textContent='';
  init({oidcConfig:{authorizeUri,redirect_uri:redirectUri,client_id:clientId,scope,
-  state:transaction.state,nonce:transaction.nonce,acr_values:acr,display,prompt,ui_locales:locale,claims_locales:locale,
+  state:transaction.state,nonce:transaction.nonce,acr_values:acr,display,prompt,ui_locales:locale,claims_locales:claimsLocales,
   claims:requestedClaims,
   code_challenge:async()=>({code_challenge:challenge,code_challenge_method:'S256'}),
   ...(usePar?{par_callback:async()=> (await api('/auth/par','POST',{transaction})).request_uri,par_callback_timeout:12000}:{})},
