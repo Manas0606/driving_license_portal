@@ -120,7 +120,7 @@ export async function decodeUserInfoResponse(userInfoResponse){
  let body=typeof userInfoResponse==='string'?userInfoResponse.trim():userInfoResponse;
  let parsed=body;
  if(typeof body==='string'&&body.startsWith('{'))parsed=JSON.parse(body);
- const compact=typeof body==='string'&&body.split('.').length===5;
+ const compact=typeof parsed==='string'&&/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(parsed);
  const serialized=parsed&&typeof parsed==='object'&&!Array.isArray(parsed)&&typeof parsed.ciphertext==='string'&&(Array.isArray(parsed.recipients)||typeof parsed.encrypted_key==='string'||typeof parsed.protected==='string');
  if(config.userinfoResponseType==='jwe'||compact||serialized){
   if(!config.encryptionFile&&!config.encryptionJson)throw new Error('UserInfo encryption key required');
