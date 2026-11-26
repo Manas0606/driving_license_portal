@@ -1,6 +1,7 @@
 import { randomBytes, createHash, timingSafeEqual, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { SignJWT, importJWK, createRemoteJWKSet, jwtVerify, compactDecrypt, decodeJwt } from 'jose';
+import axios from 'axios';
+import { SignJWT, importJWK, createRemoteJWKSet, jwtVerify, compactDecrypt, flattenedDecrypt, generalDecrypt, decodeJwt } from 'jose';
 
 export const random = () => randomBytes(32).toString('base64url');
 export const challenge = verifier => createHash('sha256').update(verifier).digest('base64url');
@@ -51,9 +52,9 @@ function safeErrorCode(error){
   return /^[A-Za-z0-9_]{1,80}$/.test(code)?code:'ERROR';
 }
 async function request(url, options = {}) {
-  const response = await fetch(trustedUrl(url), { ...options, redirect: 'error', signal: AbortSignal.timeout(12000) });
-  if (!response.ok) { const error=new Error('Identity provider HTTP '+response.status);error.code='IDP_HTTP_'+response.status;throw error; }
-  return response;
+  const response = await axios.request({url:trustedUrl(url),method:options.method||'GET',data:options.body?.toString(),headers:{...(options.body?{'Content-Type':'application/x-www-form-urlencoded'}:{}),...options.headers},timeout:12000,maxRedirects:0,proxy:false,responseType:'text',transformResponse:[value=>value],validateStatus:()=>true});
+  if(response.status<200||response.status>=300){const error=new Error('Identity provider HTTP '+response.status);error.code='IDP_HTTP_'+response.status;throw error;}
+  return {text:async()=>response.data,json:async()=>JSON.parse(response.data)};
 }
 function metadata(){
   const m=providerEndpoints();
@@ -82,7 +83,7 @@ export async function generateSignedJwt(audience) {
     .setIssuedAt().setExpirationTime('2m').setJti(randomUUID()).sign(key);
 }
 async function authenticatedForm(endpoint, form, audience=endpoint) {
-  form.set('client_assertion_type','urn:ietf:params:oauth:client-assertion-type:jwt-bearer');
+  form.set('client_assertion_type',config.assertionType);
   form.set('client_assertion',await generateSignedJwt(audience));
   return (await request(endpoint,{method:'POST',body:form})).json();
 }
@@ -96,13 +97,16 @@ export async function begin(transaction) {
     challenge:challenge(transaction.verifier)
   };
 }
-export async function pushedRequest(transaction) {
+export async function pushedRequest(transaction,uiLocale='en') {
   const m = await metadata();
   if (!config.par) throw new Error('PAR disabled');
   const form = new URLSearchParams({response_type:'code',client_id:config.clientId,redirect_uri:config.redirect,scope:config.scope,
     state:transaction.state,nonce:transaction.nonce,code_challenge:challenge(transaction.verifier),code_challenge_method:'S256'});
   if(config.acr) form.set('acr_values',config.acr);
   form.set('claims',JSON.stringify(buildClaims()));
+  form.set('claims_locales','en');
+  form.set('ui_locales',uiLocale);
+  if(config.maxAge!==undefined)form.set('max_age',config.maxAge);
   const result=await authenticatedForm(m.pushed_authorization_request_endpoint,form,config.parAudience||m.pushed_authorization_request_endpoint);
   if(typeof result.request_uri !== 'string') throw new Error('Invalid PAR response');
   return result.request_uri;
@@ -111,19 +115,29 @@ export async function post_GetToken(transaction,code,m=metadata()) {
   try{return await authenticatedForm(m.token_endpoint,new URLSearchParams({grant_type:'authorization_code',code,
     redirect_uri:config.redirect,client_id:config.clientId,code_verifier:transaction.verifier}),config.tokenAudience||m.token_endpoint);}catch(error){throw stageError('Token exchange',error);}
 }
-export async function get_GetUserInfo(accessToken,m=metadata()) {
-  let response;try{response=await request(m.userinfo_endpoint,{headers:{Authorization:'Bearer '+accessToken,Accept:'application/json, application/jwt'}});}catch(error){throw stageError('UserInfo retrieval',error);}
-  let body=(await response.text()).trim();
-  if(body.split('.').length===5&&!body.startsWith('{')){
-    if(!config.encryptionFile&&!config.encryptionJson) throw new Error('UserInfo encryption key required');
-    const key=await importJWK(JSON.parse(config.encryptionJson || await readFile(config.encryptionFile,'utf8')),'RSA-OAEP-256');
-    const decrypted=await compactDecrypt(body,key,{keyManagementAlgorithms:['RSA-OAEP-256'],contentEncryptionAlgorithms:['A256GCM','A128GCM','A256CBC-HS512']});
-    body=new TextDecoder().decode(decrypted.plaintext);
-    if(body.startsWith('{')) throw new Error('Encrypted UserInfo must contain a signed JWT');
-  }
-  // Like Health Services, decode the UserInfo returned directly by the trusted HTTPS endpoint.
-  // This is not a browser-provided token. ID token signature, nonce and matching subject remain mandatory.
-  try{return body.startsWith('{')?JSON.parse(body):decodeJwt(body);}catch(error){throw stageError('UserInfo decoding',error);}
+// Same decode/decrypt entry point as the Health Services relying party.
+export async function decodeUserInfoResponse(userInfoResponse){
+ let body=typeof userInfoResponse==='string'?userInfoResponse.trim():userInfoResponse;
+ let parsed=body;
+ if(typeof body==='string'&&body.startsWith('{'))parsed=JSON.parse(body);
+ const compact=typeof body==='string'&&body.split('.').length===5;
+ const serialized=parsed&&typeof parsed==='object'&&!Array.isArray(parsed)&&typeof parsed.ciphertext==='string'&&(Array.isArray(parsed.recipients)||typeof parsed.encrypted_key==='string'||typeof parsed.protected==='string');
+ if(config.userinfoResponseType==='jwe'||compact||serialized){
+  if(!config.encryptionFile&&!config.encryptionJson)throw new Error('UserInfo encryption key required');
+  const raw=config.encryptionJson||await readFile(config.encryptionFile,'utf8');
+  const jwk=JSON.parse(raw.trim().startsWith('{')?raw:Buffer.from(raw,'base64').toString('utf8'));
+  const key=await importJWK(jwk.keys?.[0]||jwk,'RSA-OAEP-256');
+  const options={keyManagementAlgorithms:['RSA-OAEP-256'],contentEncryptionAlgorithms:['A256GCM','A128GCM','A256CBC-HS512']};
+  const decrypted=compact?await compactDecrypt(body,key,options):Array.isArray(parsed?.recipients)?await generalDecrypt(parsed,key,options):await flattenedDecrypt(parsed,key,options);
+  body=new TextDecoder().decode(decrypted.plaintext);
+  if(body.startsWith('{'))throw new Error('Encrypted UserInfo must contain a signed JWT');
+  return decodeJwt(body);
+ }
+ return typeof parsed==='string'?decodeJwt(parsed):parsed;
+}
+export async function get_GetUserInfo(accessToken,m=metadata()){
+ let response;try{response=await request(m.userinfo_endpoint,{headers:{Authorization:'Bearer '+accessToken,Accept:'application/json, application/jwt'}});}catch(error){throw stageError('UserInfo retrieval',error);}
+ try{return await decodeUserInfoResponse(await response.text());}catch(error){throw stageError('UserInfo decoding',error);}
 }
 export async function complete(transaction, code) {
   let m;try{m=await metadata();}catch(error){throw stageError('Provider configuration',error);}

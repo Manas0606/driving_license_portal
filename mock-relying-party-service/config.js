@@ -14,7 +14,10 @@ export const config = {
   keyFile: process.env.ESIGNET_PRIVATE_JWK_FILE,
   keyJson: process.env.ESIGNET_PRIVATE_JWK || process.env.CLIENT_PRIVATE_KEY,
   encryptionFile: process.env.ESIGNET_USERINFO_JWK_FILE,
-  encryptionJson: process.env.ESIGNET_USERINFO_JWK,
+  encryptionJson: process.env.ESIGNET_USERINFO_JWK || process.env.JWE_USERINFO_PRIVATE_KEY,
+  userinfoResponseType: (process.env.USERINFO_RESPONSE_TYPE || 'auto').toLowerCase(),
+  assertionType: process.env.CLIENT_ASSERTION_TYPE || 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+  maxAge: process.env.MAX_AGE || undefined,
   redirect: new URL('/api/auth/callback', process.env.APP_ORIGIN || 'http://localhost:8080').href,
   scope: process.env.ESIGNET_SCOPE || 'openid profile',
   acr: process.env.ESIGNET_ACR || 'mosip:idp:acr:linked-wallet mosip:idp:acr:biometrics mosip:idp:acr:generated-code',
@@ -39,5 +42,5 @@ export function buildClaims(profile=readProfileConfig()){
 }
 // Only public client metadata. Signing and decryption keys remain server-side.
 export function publicClientConfig(profile=readProfileConfig()){
- return {CLIENT_ID:config.clientId,ESIGNET_UI_BASE_URL:new URL(config.authorize).origin,AUTHORIZE_URI:config.authorize,REDIRECT_URI_USER_PROFILE:config.redirect,SCOPE_USER_PROFILE:config.scope,ACRS:config.acr,DISPLAY:'page',PROMPT:'consent',GRANT_TYPE:'authorization_code',USE_PAR:config.par,CLAIMS_USER_PROFILE:buildClaims(profile),PROFILE_FIELDS:profile.fields};
+ return {CLIENT_ID:config.clientId,ESIGNET_UI_BASE_URL:new URL(config.authorize).origin,AUTHORIZE_URI:config.authorize,REDIRECT_URI_USER_PROFILE:config.redirect,SCOPE_USER_PROFILE:config.scope,ACRS:config.acr,DISPLAY:'page',PROMPT:'consent',GRANT_TYPE:'authorization_code',MAX_AGE:config.maxAge,CLAIMS_LOCALES:'en',DEFAULT_LANG:'en',MOCK_RELYING_PARTY_SERVER_URL:'',USE_PAR:config.par,CLAIMS_USER_PROFILE:encodeURIComponent(JSON.stringify(buildClaims(profile))),PROFILE_FIELDS:profile.fields};
 }

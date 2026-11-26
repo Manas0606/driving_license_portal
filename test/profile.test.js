@@ -13,5 +13,5 @@ test('new approved fields follow profile configuration end to end',()=>{
  assert.deepEqual(buildClaims(profile).userinfo.nationality,{essential:false});
  const result=selectProfile({nationality:'Original',verified_claims:[{claims:{nationality:'Updated'}}],access_token:'secret'},profile);
  assert.deepEqual(result,{nationality:'Updated'});assert.deepEqual(profileFields(result,profile.fields).at(-1),['Nationality','Updated']);
- const publicConfig=publicClientConfig(profile);assert.equal(publicConfig.PROFILE_FIELDS.at(-1).claim,'nationality');assert.equal(Object.hasOwn(publicConfig,'keyJson'),false);
+ const publicConfig=publicClientConfig(profile);assert.equal(publicConfig.PROFILE_FIELDS.at(-1).claim,'nationality');assert.deepEqual(JSON.parse(decodeURIComponent(publicConfig.CLAIMS_USER_PROFILE)).userinfo.nationality,{essential:false});assert.equal(Object.hasOwn(publicConfig,'keyJson'),false);
 });

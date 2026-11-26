@@ -11,14 +11,20 @@
     "build": "vite build",
     "start": "node --env-file-if-exists=.env mock-relying-party-service/index.js",
     "test": "node --test",
-    "check": "node --check mock-relying-party-service/index.js && node --check mock-relying-party-service/app.js && node --check mock-relying-party-service/config.js && node --check mock-relying-party-service/esignetService.js && node --check mock-relying-party-ui/src/session.js && node --check mock-relying-party-ui/src/main.js && node --check mock-relying-party-ui/src/identity-config.js && node --check mock-relying-party-ui/src/profile.js && node --check mock-relying-party-ui/src/locale.js"
+    "check": "node --check mock-relying-party-service/index.js && node --check mock-relying-party-service/app.js && node --check mock-relying-party-service/config.js && node --check mock-relying-party-service/esignetService.js && node --check mock-relying-party-ui/src/session.js && node --check mock-relying-party-ui/src/constants/clientDetails.js && node --check mock-relying-party-ui/src/services/relyingPartyService.js && node --check mock-relying-party-ui/src/profile.js && node --check mock-relying-party-ui/src/i18n.js"
   },
   "dependencies": {
     "@mosip/sign-in-with-esignet": "0.1.1-beta.0",
     "express": "5.1.0",
     "jose": "6.1.0",
     "helmet": "8.1.0",
-    "express-rate-limit": "8.1.0"
+    "express-rate-limit": "8.1.0",
+    "axios": "1.13.2",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "i18next": "23.16.8",
+    "react-i18next": "15.4.1",
+    "i18next-http-backend": "2.7.3"
   },
   "devDependencies": {
     "vite": "7.2.2"

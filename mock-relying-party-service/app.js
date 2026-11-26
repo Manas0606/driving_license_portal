@@ -4,7 +4,7 @@ import { rateLimit } from 'express-rate-limit';
 import { resolve } from 'node:path';
 import { begin, complete, isConfigured, validateBrowserTransaction, pushedRequest, probeProvider } from './esignetService.js';
 
-import {origin,publicClientConfig} from './config.js';
+import {origin,publicClientConfig,config} from './config.js';
 const secure=origin.startsWith('https:');
 const app=express();
 app.disable('x-powered-by');
@@ -30,7 +30,7 @@ app.post('/api/auth/start',rateLimit({windowMs:60_000,limit:15}),async(req,res)=
 app.post('/api/auth/par',async(req,res)=>{
   if(!isConfigured())return res.status(503).json({error:'Secure sign-in is not configured on the server.'});
   const tx=transaction(req,res);if(!tx)return;
-  res.json({request_uri:await pushedRequest(tx)});
+  res.json({request_uri:await pushedRequest(tx,typeof req.body?.ui_locales==='string'&&/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$/.test(req.body.ui_locales)?req.body.ui_locales:'en')});
 });
 // Keep the existing registered callback URI. Return to the UI for state validation.
 app.get('/api/auth/callback',(req,res)=>{
@@ -44,6 +44,8 @@ app.get('/api/auth/callback',(req,res)=>{
 app.post(['/fetchUserInfo','/api/fetchUserInfo'],rateLimit({windowMs:60_000,limit:15}),async(req,res)=>{
   if(!isConfigured())return res.status(503).json({error:'Secure sign-in is not configured on the server.'});
   const tx=transaction(req,res);if(!tx)return;
+  const {client_id,redirect_uri,grant_type,code_verifier}=req.body||{};
+  if((client_id!==undefined&&client_id!==config.clientId)||(redirect_uri!==undefined&&redirect_uri!==config.redirect)||(grant_type!==undefined&&grant_type!=='authorization_code')||(code_verifier!==undefined&&code_verifier!==tx.verifier))return res.status(400).json({error:'Invalid relying party request'});
   const code=req.body?.code;
   if(typeof code!=='string'||!code||code.length>4096)return res.status(400).json({error:'Invalid authorization code'});
   try {
